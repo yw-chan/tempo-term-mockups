@@ -81,7 +81,41 @@
   padding-top: 14px; border-bottom: none;
 }
 </style></head>
-<body><div class="fig"><div class="fig-label"><span class="n">1</span>預設 —— 工作區。這是 #397 落地後就有的樣子,基準那一列是 #398 加上去的唯一一條</div><div class="window">
+<body>
+<style>
+.mk-back {
+  display: inline-flex; align-items: center; gap: 7px; align-self: flex-start;
+  font-family: "IBM Plex Mono", Consolas, monospace; font-size: 12px;
+  color: #85827b; text-decoration: none; border: 1px solid #333;
+  border-radius: 6px; padding: 5px 11px; margin-bottom: 4px; background: #222;
+}
+.mk-back:hover { color: #dbd7ca; border-color: #454545; }
+.mk-back:focus-visible { outline: 2px solid #5eaab5; outline-offset: 2px; }
+.mk-head {
+  display: flex; flex-direction: column; gap: 10px;
+  margin: 6px 0 26px; align-self: stretch;
+}
+.mk-head .mk-eyebrow {
+  font-family: "IBM Plex Mono", Consolas, monospace; font-size: 11px;
+  letter-spacing: .14em; text-transform: uppercase; color: #5eaab5;
+}
+.mk-head .mk-title {
+  font-family: "IBM Plex Sans TC", "Noto Sans TC", "Microsoft JhengHei", "Segoe UI", sans-serif;
+  font-size: 30px; font-weight: 600; margin: 0; line-height: 1.25;
+  letter-spacing: -.01em; color: #dbd7ca;
+}
+.mk-head .mk-sub {
+  font-family: "IBM Plex Sans TC", "Noto Sans TC", "Microsoft JhengHei", "Segoe UI", sans-serif;
+  font-size: 14px; line-height: 1.75; color: #bfbaaa; margin: 0; max-width: 68ch;
+}
+</style>
+<a class="mk-back" href="index.html">&larr; 全部 mockup</a>
+<header class="mk-head">
+  <div class="mk-eyebrow">tempo-term · diff · issue #398</div>
+  <h1 class="mk-title">比較基準選單</h1>
+  <p class="mk-sub">同一組提案的選單部分:基準那一列長什麼樣、有哪些選項、以及它跟工作區檢視的關係。</p>
+</header>
+<div class="fig"><div class="fig-label"><span class="n">1</span>預設 —— 工作區。這是 #397 落地後就有的樣子,基準那一列是 #398 加上去的唯一一條</div><div class="window">
   <div class="tabstrip">
     <div class="ws"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg> Workspace 1 <span class="chev"><svg class="i" width="12" height="12" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span></div>
     <div class="divider"></div>
