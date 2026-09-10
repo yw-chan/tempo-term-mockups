@@ -125,17 +125,6 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   padding: 0 8px; font-family: var(--mono); font-size: 10px; color: var(--fg-subtle);
 }
 
-.overlay-wrap {
-  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
-  padding: 16px 18px; display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap;
-}
-.legend { display: flex; flex-direction: column; gap: 12px; min-width: 260px; flex: 1; }
-.legend-row { display: flex; gap: 10px; align-items: flex-start; }
-.legend-row .sw { width: 26px; height: 3px; border-radius: 2px; margin-top: 8px; flex: none; }
-.legend-row .txt { display: flex; flex-direction: column; }
-.legend-row .nm { font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--fg); }
-.legend-row .ds { font-size: 11.5px; color: var(--fg-subtle); line-height: 1.55; }
-.legend-row .ds b { color: var(--fg-muted); font-weight: 500; }
 .note {
   border-left: 2px solid var(--line-strong); padding-left: 16px;
   display: flex; flex-direction: column; gap: 8px;
@@ -224,16 +213,6 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       <button class="ghost" id="reset">重來</button>
     </span>
   </div>
-
-  <section style="display:flex;flex-direction:column;gap:14px">
-    <h2>先選畫法:同一個「跨三條」該長什麼樣</h2>
-    <p>
-      就是你截圖那個情況:主幹旁邊一條跨一欄的分支、一條跨三欄的分支,一起併回同一個 commit。
-      跨一欄那條四種畫法完全相同,所以只畫一次(灰色);
-      <strong>跨三欄那條四種疊在一起</strong>,顏色對應下面的圖例。指一個代號我就套進整頁。
-    </p>
-    <div class="overlay-wrap" id="shapes"></div>
-  </section>
 
   <div class="specimen">
     <div class="specimen-bar"><span id="cap"></span></div>
@@ -676,102 +655,6 @@ function esc(s) {
   return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/* ---- candidate turn shapes, for picking one ---- */
-const H1 = Math.min(LANE_W * BEND.ratio, ROW_HEIGHT * BEND.capRows); // the one-lane height
-
-/** A: one cubic, height fixed. The wide one is the narrow one stretched. */
-function shapeA(dx, k) {
-  const b = H1;
-  return { b, d: (x, ty) => `C ${x} ${ty + b * k}, ${x + dx} ${ty + b - b * k}, ${x + dx} ${ty + b}` };
-}
-/** B: same, with the S softened as the crossing widens. */
-function shapeB(dx) {
-  return shapeA(dx, curveFor(dx));
-}
-/**
- * D: two quarter turns with a flat middle, height fixed at the one-lane value.
- *
- * A flat middle only works if the corner *ends* flat. Splitting the one-lane S
- * in half and inserting a horizontal run — which an earlier attempt did — joins
- * a sloped tangent to a level one and puts a visible kink at each end of the
- * middle. So the corner here is a real quarter turn, vertical to horizontal,
- * and the two of them meet the flat run smoothly.
- */
-const ARC = 0.5523; // cubic approximation of a quarter arc
-function shapeD(dx) {
-  const dxUnit = Math.sign(dx) * Math.min(Math.abs(dx), LANE_W);
-  const extraX = dx - dxUnit;
-  const rx = dxUnit / 2;
-  /* Proportioned, not stretched to fill the one-lane height. Forcing that
-     height on top of a flat middle would make each corner 27px tall and 7px
-     wide — a long lean rather than a corner, which is what a flat middle costs
-     you: it consumes no vertical distance, so the corners must swallow all of
-     it. The three wishes (same height, flat middle, round corners) cannot all
-     hold at once; this drops the first. */
-  const ry = Math.min(H1 / 2, Math.abs(rx) * 2);
-  const b = ry * 2;
-  return {
-    b,
-    d: (x, ty) => {
-      const p = (px, py) => `${x + px} ${ty + py}`;
-      /* down → across */
-      let s = `C ${p(0, ry * ARC)}, ${p(rx - rx * ARC, ry)}, ${p(rx, ry)}`;
-      if (extraX !== 0) s += ` L ${p(rx + extraX, ry)}`;
-      /* across → down */
-      s += ` C ${p(rx + extraX + rx * ARC, ry)}, ${p(dx, b - ry * ARC)}, ${p(dx, b)}`;
-      return s;
-    },
-  };
-}
-
-const CANDIDATES = [
-  { id: "A", color: "#e0555f", name: "A · 定高單曲線",
-    desc: "跨幾條都一樣高，寬的就是窄的<b>橫向拉開</b>。起彎點不變，但線在同樣高度內要甩三倍遠。",
-    fn: (dx) => shapeA(dx, BEND.curve) },
-  { id: "B", color: "#e3712f", name: "B · 定高＋S 放軟（採用）",
-    desc: "一樣高，但跨得越寬 S 越<b>收斂成斜線</b>，不再是被拉扁的 S。",
-    fn: shapeB },
-  { id: "D", color: "#3b8ee0", name: "D · 圓角＋平中段",
-    desc: "垂直轉水平的真正圓角，中間走平。<b>但平的中段不吃垂直距離</b>，圓角要比例正常，總高就只剩 28px——起彎點反而比其他三個低很多。三個條件湊不齊。",
-    fn: shapeD },
-];
-
-(function drawShapes() {
-  const host = document.getElementById("shapes");
-  /* The situation from the screenshot, at the real geometry: a trunk, a branch
-     one lane out, and a branch three lanes out, all meeting the same commit. */
-  const ROWS = 6;
-  const x0 = 44;                       // trunk
-  const top = 20;
-  const merge = top + (ROWS - 1) * ROW_HEIGHT;
-  const W = 210, HGT = merge + 34;
-  const one = CANDIDATES[0].fn(-LANE_W);   // identical across all four
-
-  const g = [`<svg width="100%" viewBox="0 0 ${W} ${HGT}" style="display:block;max-width:${W}px">`];
-  /* trunk */
-  g.push(`<path d="M ${x0} ${top - 12} L ${x0} ${HGT - 8}" stroke="${PALETTE[0]}" stroke-width="2" fill="none" opacity=".7"/>`);
-  /* the one-lane branch — all four agree here, so it is drawn once */
-  const x1 = x0 + LANE_W;
-  g.push(`<path d="M ${x1} ${top} L ${x1} ${merge - one.b} ${one.d(x1, merge - one.b)}" fill="none" stroke="#85827b" stroke-width="2"/>`);
-  g.push(`<circle cx="${x1}" cy="${top}" r="4.5" fill="#85827b" stroke="${SURFACE}" stroke-width="1.5"/>`);
-  /* the three-lane branch, once per candidate, stacked */
-  const x3 = x0 + 3 * LANE_W;
-  CANDIDATES.forEach((c) => {
-    const s = c.fn(-3 * LANE_W);
-    g.push(`<path d="M ${x3} ${top} L ${x3} ${merge - s.b} ${s.d(x3, merge - s.b)}" fill="none" stroke="${c.color}" stroke-width="2" opacity=".9"/>`);
-  });
-  g.push(`<circle cx="${x3}" cy="${top}" r="4.5" fill="#85827b" stroke="${SURFACE}" stroke-width="1.5"/>`);
-  /* the commit they all land on */
-  g.push(`<circle cx="${x0}" cy="${merge}" r="5.5" fill="${PALETTE[0]}" stroke="${SURFACE}" stroke-width="2"/>`);
-  g.push(`</svg>`);
-
-  const legend = CANDIDATES.map((c) => `<div class="legend-row">
-      <span class="sw" style="background:${c.color}"></span>
-      <span class="txt"><span class="nm">${c.name}</span><span class="ds">${c.desc}</span></span>
-    </div>`).join("");
-
-  host.innerHTML = g.join("") + `<div class="legend">${legend}</div>`;
-})();
 
 /* ---- state ---- */
 let loaded = PAGE;
