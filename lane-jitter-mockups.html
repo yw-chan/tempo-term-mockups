@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lane 抖動測試台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+TC:wght@400;500;600;700&display=swap">
+<style>
+:root {
+  --ground: #171717; --surface: #222222; --raised: #292929;
+  --line: #333333; --line-strong: #454545;
+  --fg: #dbd7ca; --fg-muted: #bfbaaa; --fg-subtle: #85827b;
+  --accent: #5eaab5; --accent-ink: #10282c;
+  --bad: #cb7676; --ok: #4d9375; --warn: #e6cc77;
+  --sans: "IBM Plex Sans TC", "Noto Sans TC", "Microsoft JhengHei", "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", Consolas, "JetBrains Mono", monospace;
+  --app-sans: "Segoe UI", "Noto Sans TC", sans-serif;
+  --app-mono: Consolas, "JetBrains Mono", monospace;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--ground); color: var(--fg); font-family: var(--sans);
+  font-size: 14px; line-height: 1.75; margin: 0; padding: 36px 24px 90px;
+}
+.wrap { max-width: 940px; margin: 0 auto; display: flex; flex-direction: column; gap: 30px; }
+.eyebrow {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent);
+}
+h1 { font-size: 30px; font-weight: 600; margin: 0; line-height: 1.3; letter-spacing: -.01em; }
+p { margin: 0; max-width: 68ch; color: var(--fg-muted); }
+p strong { color: var(--fg); font-weight: 600; }
+code {
+  font-family: var(--mono); font-size: .88em; background: var(--raised);
+  border: 1px solid var(--line); border-radius: 3px; padding: 0 4px; color: var(--fg);
+}
+h2 { font-size: 17px; font-weight: 600; margin: 0; }
+
+/* ---------- the control bar, pinned at the top ---------- */
+.bar {
+  position: sticky; top: 0; z-index: 40;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: 10px;
+  padding: 16px 18px; display: flex; flex-wrap: wrap; align-items: center;
+  row-gap: 14px; column-gap: 16px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .35);
+}
+.toggle {
+  display: flex; align-items: center; gap: 10px; cursor: pointer;
+  font-size: 14px; font-weight: 600; color: var(--fg); flex: none;
+}
+.toggle input { accent-color: var(--accent); width: 17px; height: 17px; margin: 0; }
+.toggle .sub { font-weight: 400; font-size: 11.5px; color: var(--fg-subtle); font-family: var(--mono); }
+/* The two buttons travel together and always sit at the end. Left loose they
+   split across the wrap, and the pair then jumps line whenever the tally's
+   text changes length — a control bar that moves under the pointer while you
+   are clicking it. */
+.bar .actions { margin-left: auto; display: flex; gap: 10px; flex: none; }
+button {
+  font-family: var(--sans); font-size: 13px; font-weight: 600;
+  border-radius: 6px; padding: 8px 16px; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent);
+}
+button:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+button:disabled { opacity: .4; cursor: default; }
+button.ghost {
+  border-color: var(--line-strong); background: transparent; color: var(--fg-muted);
+}
+select {
+  font-family: var(--mono); font-size: 12.5px; margin-top: 3px;
+  background: var(--raised); color: var(--fg);
+  border: 1px solid var(--line-strong); border-radius: 5px; padding: 4px 8px;
+}
+select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tally {
+  font-family: var(--mono); font-size: 12.5px; border-radius: 6px;
+  padding: 7px 12px; flex: none; font-variant-numeric: tabular-nums;
+  /* Wide enough for the longest of the three messages, so the bar's layout
+     does not change when the count does. */
+  min-width: 16em; text-align: center;
+}
+.tally.zero { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); }
+.tally.hit { color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, transparent); }
+
+/* ---------- graph ---------- */
+.specimen { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.specimen-bar {
+  height: 30px; display: flex; align-items: center; gap: 10px; padding: 0 12px;
+  border-bottom: 1px solid var(--line); background: var(--raised);
+  font-family: var(--mono); font-size: 11px; color: var(--fg-subtle);
+}
+.graph-host { position: relative; overflow-x: auto; font-family: var(--app-sans); }
+.rowlist { position: absolute; inset: 0; pointer-events: none; }
+.grow {
+  position: absolute; left: 0; right: 0; height: 36px;
+  display: flex; align-items: center; gap: 10px; padding-right: 14px;
+  transform: translateY(-50%); white-space: nowrap;
+}
+.grow.moved { background: color-mix(in srgb, var(--warn) 13%, transparent); }
+.grow .hash { font-family: var(--app-mono); font-size: 12px; font-weight: 600; color: var(--accent); flex: none; }
+.grow .msg { font-size: 12px; color: var(--fg-muted); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.grow .badge {
+  font-family: var(--mono); font-size: 10.5px; color: #241d05; background: var(--warn);
+  border-radius: 3px; padding: 0 6px; flex: none; font-weight: 600;
+}
+.grow .fresh { font-family: var(--mono); font-size: 10.5px; color: var(--fg-subtle); flex: none; }
+.chip {
+  display: inline-flex; align-items: center; font-family: var(--app-mono); font-size: 10.5px;
+  border-radius: 4px; padding: 0 6px; border: 1px solid var(--line-strong);
+  color: var(--fg-subtle); background: var(--surface); flex: none;
+}
+.chip.head {
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok);
+}
+.pagemark {
+  position: absolute; left: 0; right: 0; height: 0;
+  border-top: 1px dashed color-mix(in srgb, var(--fg-subtle) 60%, transparent);
+}
+.pagemark span {
+  position: absolute; right: 10px; top: -9px; background: var(--surface);
+  padding: 0 8px; font-family: var(--mono); font-size: 10px; color: var(--fg-subtle);
+}
+
+.overlay-wrap {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: 16px 18px; display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap;
+}
+.legend { display: flex; flex-direction: column; gap: 12px; min-width: 260px; flex: 1; }
+.legend-row { display: flex; gap: 10px; align-items: flex-start; }
+.legend-row .sw { width: 26px; height: 3px; border-radius: 2px; margin-top: 8px; flex: none; }
+.legend-row .txt { display: flex; flex-direction: column; }
+.legend-row .nm { font-family: var(--mono); font-size: 12.5px; font-weight: 600; color: var(--fg); }
+.legend-row .ds { font-size: 11.5px; color: var(--fg-subtle); line-height: 1.55; }
+.legend-row .ds b { color: var(--fg-muted); font-weight: 500; }
+.note {
+  border-left: 2px solid var(--line-strong); padding-left: 16px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.note.warn { border-color: color-mix(in srgb, var(--warn) 60%, transparent); }
+.note.warn h2 { color: var(--warn); }
+.note.ok { border-color: color-mix(in srgb, var(--ok) 60%, transparent); }
+.note.ok h2 { color: var(--ok); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+  <header style="display:flex;flex-direction:column;gap:12px">
+    <div class="eyebrow">tempo-term · git-graph · 分頁載入</div>
+    <h1>Lane 抖動測試台</h1>
+    <p>
+      Git Graph 是分頁載入的。這頁只驗一件事:<strong>按下「載入更多」之後,
+      已經畫好的那幾列會不會換欄位。</strong>換欄位的列會被標黃並打上舊欄→新欄。
+    </p>
+  </header>
+
+  <div class="bar">
+    <label class="toggle" for="compact">
+      <input type="checkbox" id="compact">
+      <span>lane 讓位<span class="sub" style="display:block">欄位空出來就有人補上</span></span>
+    </label>
+    <label class="toggle" for="shape" style="font-weight:400">
+      <span>歷史形狀
+        <span class="sub" style="display:block">誰站在那個洞旁邊</span>
+      </span>
+      <select id="shape">
+        <option value="plain" selected>一般：旁邊是長分支</option>
+        <option value="tail">短尾巴跨過分頁邊界</option>
+      </select>
+    </label>
+    <label class="toggle" for="look" style="font-weight:400">
+      <span>預先多載入
+        <span class="sub" style="display:block">只拿來判斷,不畫出來</span>
+      </span>
+      <select id="look">
+        <option value="0">0 筆</option>
+        <option value="2">2 筆</option>
+        <option value="4" selected>4 筆</option>
+        <option value="8">8 筆</option>
+      </select>
+    </label>
+    <label class="toggle" for="freeze">
+      <input type="checkbox" id="freeze">
+      <span>凍結已畫的<span class="sub" style="display:block">不改舊的,往下再讓一次</span></span>
+    </label>
+    <span class="tally zero" id="tally">尚未載入第二頁</span>
+    <span class="actions">
+      <button id="more">載入更多 ↓</button>
+      <button class="ghost" id="reset">重來</button>
+    </span>
+  </div>
+
+  <section style="display:flex;flex-direction:column;gap:14px">
+    <h2>先選畫法:同一個「跨三條」該長什麼樣</h2>
+    <p>
+      就是你截圖那個情況:主幹旁邊一條跨一欄的分支、一條跨三欄的分支,一起併回同一個 commit。
+      跨一欄那條四種畫法完全相同,所以只畫一次(灰色);
+      <strong>跨三欄那條四種疊在一起</strong>,顏色對應下面的圖例。指一個代號我就套進整頁。
+    </p>
+    <div class="overlay-wrap" id="shapes"></div>
+  </section>
+
+  <div class="specimen">
+    <div class="specimen-bar"><span id="cap"></span></div>
+    <div class="graph-host" id="graph"></div>
+  </div>
+
+  <div class="note ok" id="note-off">
+    <h2>讓位關閉時:永遠是 0</h2>
+    <p>
+      現在的演算法由新到舊單趟走,而且每一步只看當下活著的 lane。
+      這給了一個免費的性質:<strong>載入更舊的 commit,不可能改變已經算好的那幾列</strong>——
+      新資料只會接在後面。你可以一直按「載入更多」,黃色標記永遠不會出現。
+    </p>
+  </div>
+
+  <div class="note ok">
+    <h2>一般形狀:怎麼調都不會抖</h2>
+    <p>
+      預設這個形狀,<strong>把預先多載入切到 0 筆也不會抖</strong>。
+      第 9 列那個洞旁邊是 <code>feat/long-branch</code>,而它真的很長——
+      「在窗尾還活著,所以當成長」這個猜測一猜就中,載入更多不會推翻它。
+    </p>
+    <p>
+      這件事值得記住:<strong>光是不把「還活著」謊報成「就在這裡結束」,
+      常見的情況就已經穩了。</strong>
+    </p>
+  </div>
+
+  <div class="note warn" id="note-on">
+    <h2>短尾巴跨過分頁邊界:這時才會抖</h2>
+    <p>
+      把「歷史形狀」切到第二個選項。多出來的 <code>feat/short-tail</code>
+      <strong>自己的 commit 在第 8 列就走完了</strong>,剩下的只是一條往主幹去的線,
+      而它<strong>在第 12 列到站,只差分頁邊界一列</strong>。
+    </p>
+    <p>
+      第一頁看不到那一列。窗尾它還活著,被當成「還很長」→ 判斷「該搬」。
+      載入第二頁才發現它一列後就結束 → 翻轉成「不搬」,
+      <strong>第一頁裡已經畫好的那幾列,欄位變了</strong>(0 筆時會標黃兩列)。
+    </p>
+    <p>
+      所以會出事的不是「長分支」,是<strong>剛好卡在分頁邊界的短尾巴</strong>。
+      這種形狀不罕見——開了分支、推了兩個 commit、然後放著沒動,正好就長這樣。
+    </p>
+  </div>
+
+  <div class="note ok">
+    <h2>預先多載入 4 筆之後:抖動消失,而且是可以證明的</h2>
+    <p>
+      關鍵是<strong>問對問題</strong>。判斷從來不需要知道「這條 lane 什麼時候結束」,
+      只需要知道「它<strong>還撐不撐得過 <code>MIN_RUN</code> 列</strong>」——
+      而那只要往前看 <code>MIN_RUN</code> 列就答得出來。
+    </p>
+    <p>
+      對任何一個畫出來的列 <code>r</code>,只有兩種情況:
+      lane 在窗內就結束了(結束點由 <code>r</code> 之前的資料決定,載入更多不會改變),
+      或是到窗尾都還活著(那它至少還有 <code>L + 1</code> 列)。
+      只要<strong><code>L ≥ MIN_RUN − 1</code></strong>,第二種情況的答案恆為「該搬」,
+      不可能翻轉。<code>MIN_RUN = 4</code> 時 <strong>3 筆就夠</strong>,這裡用 4 留一列餘裕。
+    </p>
+    <p>
+      注意這個界線<strong>跟 repo 無關</strong>:不管有幾條分支、歷史多長、一頁載幾筆,
+      要多看的列數只由 <code>MIN_RUN</code> 決定。
+      因為整個演算法裡<strong>只有這一處會問到未來</strong>——
+      lane 的認領、釋放、收攏、配色全都只看當下和過去。
+    </p>
+    <p>
+      把選單切到 <code>2 筆</code> 或 <code>0 筆</code> 可以看到抖動回來,
+      而且只發生在窗尾那幾列——正好是上面那個不等式預測的範圍。
+    </p>
+    <p>
+      實作上這兩個數字必須綁在一起:<strong>預先載入的筆數要從 <code>MIN_RUN</code> 推導</strong>,
+      不能各自寫死。有人日後把 <code>MIN_RUN</code> 調大而沒動載入量,抖動就會無聲地回來。
+    </p>
+  </div>
+
+  <div class="note ok">
+    <h2>另一條路:不改舊的,往下再讓一次</h2>
+    <p>
+      勾「凍結已畫的」。它換了個角度:<strong>不去把決策做對,而是永不收回。</strong>
+      已經畫過的每一列原封不動重播當時的決定,新載入的區域才重新判斷。
+      猜錯的那條 lane 不會被搬回去——它在讀者還沒看到的地方<strong>再讓一次位</strong>。
+    </p>
+    <p>
+      以短尾巴那個案例來說:第 9 列的決定保留,修正發生在<strong>第 12 列</strong>,
+      也就是新載入的第一列(<code>2→1</code>、<code>3→2</code>)。已畫過的列換欄數是 <strong>0</strong>。
+    </p>
+    <p>
+      跟「預先多載入」比:
+      <strong>不用多抓資料</strong>,而且它是<em style="font-style:normal;color:var(--fg)">全面</em>的保證——
+      日後就算再加一條會偷看未來的規則,凍結一樣擋得住,不必重新推導界線。
+      代價是要<strong>存狀態</strong>(每一列做過哪些讓位),而且畫面上會多一次橫移:
+      同一條線先讓了一格、過幾列又讓一格,而全知的話它根本不用動。
+    </p>
+  </div>
+
+  <div class="note">
+    <h2>還有一種抖動,跟讓位無關</h2>
+    <p>
+      新載入的列如果用到更多 lane,<strong>gutter 會變寬</strong>,訊息欄跟著位移。
+      這件事開不開讓位都會發生,解法是「一個 session 內只增不減」——
+      發現第 9 條就加寬,捲回去不要縮回來。
+    </p>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+
+const PALETTE = ["#e0555f", "#e3712f", "#e8c139", "#46a758", "#3b8ee0", "#6366d6", "#a857c4"];
+const SURFACE = "#222222";
+const ACCENT = "#5eaab5";
+const ROW_HEIGHT = 36;
+const PAD_LEFT = 16;
+const PAD_TOP = 22;
+const LANE_W = 14;
+const BEND = { ratio: 8, capRows: 1.5, curve: 0.72 };
+const PAGE = 12;
+
+/**
+ * Built so the decision genuinely flips, which takes a specific shape:
+ *
+ *  - the hole opens at row 9, near the end of page one
+ *    (`fix/quick-hotfix` lands on the trunk and frees lane 1)
+ *  - the lane next to that hole belongs to `feat/short-branch`, whose own
+ *    last commit is already behind us — it is just a line on its way to the
+ *    trunk, and it gets there at row 12, three rows past the page boundary
+ *
+ * That last part is what makes it flip. A branch that really is long, like
+ * `feat/long-branch` below, is guessed correctly by "still open at the edge,
+ * therefore long" and never moves. Only a lane that *looks* long at the
+ * boundary and turns out to end just past it can change its mind.
+ */
+/** Two long branches beside the trunk, converging at the bottom. */
+const HISTORY_PLAIN = [
+  { h: "66dbaed", p: ["t1a4c20"], head: true, ref: "master", m: "keep the folders you had open" },
+  { h: "9f13e7b", p: ["t1a4c20"], ref: "fix/quick-hotfix", m: "one commit, straight back to the trunk" },
+  { h: "b28c74d", p: ["b2e1f09"], ref: "feat/long-branch", m: "give row hover its own token" },
+  { h: "c05e8b4", p: ["c2d7a13"], ref: "feat/other-branch", m: "compare lanes, not x coordinates" },
+  { h: "b2e1f09", p: ["b3f6c81"], m: "…and the commit before it" },
+  { h: "c2d7a13", p: ["c3b9e40"], m: "…and the commit before it" },
+  { h: "b3f6c81", p: ["b4a0d55"], m: "…and the commit before it" },
+  { h: "c3b9e40", p: ["c4e2f77"], m: "…and the commit before it" },
+  { h: "b4a0d55", p: ["b5c8e12"], m: "…and the commit before it" },
+  { h: "t1a4c20", p: ["t2b7d31"], m: "the hotfix lands here — lane 1 frees" },
+  { h: "c4e2f77", p: ["c5a1b68"], m: "…and the commit before it" },
+  { h: "b5c8e12", p: ["b6d3a94"], m: "…and the commit before it" },
+  /* ---- page 1 ends here ---- */
+  { h: "c5a1b68", p: ["c6f4e20"], m: "…and the commit before it" },
+  { h: "b6d3a94", p: ["b7e9c05"], m: "…and the commit before it" },
+  { h: "c6f4e20", p: ["c7d0a83"], m: "…and the commit before it" },
+  { h: "b7e9c05", p: ["b8a5f61"], m: "…and the commit before it" },
+  { h: "c7d0a83", p: ["t2b7d31"], m: "…and back to the trunk" },
+  { h: "b8a5f61", p: ["t2b7d31"], m: "…and back to the trunk" },
+  { h: "t2b7d31", p: ["t3c9e42"], m: "both long branches land here" },
+  { h: "t3c9e42", p: ["t4d1a75"], m: "size the diff type from the font setting" },
+  { h: "t4d1a75", p: ["t5e6b08"], m: "align the diff header controls" },
+  { h: "t5e6b08", p: [], m: "archive v0.3.5" },
+];
+
+/**
+ * The same shape, plus one branch whose own commits are finished by row 8 —
+ * from there it is only a line on its way to the trunk, and it gets there at
+ * row 13, one row past the page boundary. That tail is the only thing that
+ * makes a decision flip: a branch that really is long is guessed correctly by
+ * "still open at the edge, therefore long" and never moves.
+ */
+const HISTORY_TAIL = [
+  { h: "66dbaed", p: ["t1a4c20"], head: true, ref: "master", m: "keep the folders you had open" },
+  { h: "9f13e7b", p: ["t1a4c20"], ref: "fix/quick-hotfix", m: "one commit, straight back to the trunk" },
+  { h: "a71c3d5", p: ["a82d4e6"], ref: "feat/short-tail", m: "its commits finish early; the line does not" },
+  { h: "b28c74d", p: ["b2e1f09"], ref: "feat/long-branch", m: "give row hover its own token" },
+  { h: "c05e8b4", p: ["c2d7a13"], ref: "feat/other-branch", m: "compare lanes, not x coordinates" },
+  { h: "a82d4e6", p: ["a93e5f7"], m: "…short tail, second commit" },
+  { h: "b2e1f09", p: ["b3f6c81"], m: "…and the commit before it" },
+  { h: "c2d7a13", p: ["c3b9e40"], m: "…and the commit before it" },
+  { h: "a93e5f7", p: ["t2b7d31"], m: "short tail's last commit — only a line from here" },
+  { h: "t1a4c20", p: ["t2b7d31"], m: "the hotfix lands here — lane 1 frees" },
+  { h: "b3f6c81", p: ["b4a0d55"], m: "…and the commit before it" },
+  { h: "c3b9e40", p: ["c4e2f77"], m: "…and the commit before it" },
+  /* ---- page 1 ends here ---- */
+  { h: "t2b7d31", p: ["t3c9e42"], m: "the short tail lands here — one row past the boundary" },
+  { h: "b4a0d55", p: ["b5c8e12"], m: "…and the commit before it" },
+  { h: "c4e2f77", p: ["c5a1b68"], m: "…and the commit before it" },
+  { h: "b5c8e12", p: ["b6d3a94"], m: "…and the commit before it" },
+  { h: "c5a1b68", p: ["t3c9e42"], m: "…and back to the trunk" },
+  { h: "b6d3a94", p: ["t3c9e42"], m: "…and back to the trunk" },
+  { h: "t3c9e42", p: ["t4d1a75"], m: "both long branches land here" },
+  { h: "t4d1a75", p: ["t5e6b08"], m: "align the diff header controls" },
+  { h: "t5e6b08", p: [], m: "archive v0.3.5" },
+];
+
+let HISTORY = HISTORY_PLAIN;
+
+function laneX(lane) { return PAD_LEFT + lane * LANE_W + 12; }
+function gutterWidth(lanes) { return PAD_LEFT + lanes * LANE_W + 24; }
+
+function laneRunEnds(commits) {
+  const active = [], awaitedBy = [], endOf = {};
+  const close = (i, row) => {
+    for (const h of awaitedBy[i]) if (endOf[h] === undefined) endOf[h] = row;
+    active[i] = ""; awaitedBy[i] = [];
+  };
+  const claim = () => {
+    let i = active.indexOf("");
+    if (i === -1) { active.push(""); awaitedBy.push([]); i = active.length - 1; }
+    awaitedBy[i] = [];
+    return i;
+  };
+  commits.forEach((commit, index) => {
+    let lane = active.indexOf(commit.h);
+    if (lane === -1) lane = claim();
+    for (let i = 0; i < active.length; i++) if (i !== lane && active[i] === commit.h) close(i, index);
+    if (commit.p.length > 0) {
+      active[lane] = commit.p[0];
+      awaitedBy[lane].push(commit.p[0]);
+      for (let k = 1; k < commit.p.length; k++) {
+        const l = claim(); active[l] = commit.p[k]; awaitedBy[l].push(commit.p[k]);
+      }
+    } else close(lane, index);
+  });
+  /* A lane still running when the loaded data stops has NOT ended there.
+     Closing it at the last row — which an earlier version of this did — is a
+     lie, and it is the whole reason a decision can flip once more history
+     arrives. Left open, it simply reads as "still long", which is the honest
+     answer and the stable one. */
+  for (let i = 0; i < active.length; i++) if (active[i] !== "") close(i, Infinity);
+  return endOf;
+}
+
+/**
+ * `frozen` keeps the compaction decisions already drawn.
+ *
+ * The alternative to looking ahead: instead of trying to get the decision
+ * right the first time, never take one back. Rows up to `frozen.upTo` replay
+ * exactly the moves they were drawn with, whatever the new data says; rows
+ * below decide freshly. A lane that yielded on a guess that turned out wrong
+ * simply yields again further down, in territory the reader has not seen yet.
+ */
+function computeLayout(commits, compact, frozen) {
+  const layouts = {}, activeLanes = [], laneColors = [], shifts = {};
+  let nextColor = 0, widest = 0;
+  const runEnd = laneRunEnds(commits);
+  const MIN_RUN = 4;
+  const worthMoving = (hash, row) => {
+    const end = runEnd[hash];
+    return end === undefined || end - row >= MIN_RUN;
+  };
+  const pickColor = () => {
+    const used = new Set();
+    for (let i = 0; i < activeLanes.length; i++) if (activeLanes[i] !== "") used.add(laneColors[i]);
+    for (let off = 0; off < PALETTE.length; off++) {
+      const cand = (nextColor + off) % PALETTE.length;
+      if (!used.has(cand)) { nextColor = cand + 1; return cand; }
+    }
+    return nextColor++ % PALETTE.length;
+  };
+  const claimLane = () => {
+    const free = activeLanes.indexOf("");
+    if (free !== -1) { laneColors[free] = pickColor(); return free; }
+    activeLanes.push(""); laneColors.push(pickColor());
+    return activeLanes.length - 1;
+  };
+  const applyMove = (row, from, to) => {
+    const moved = activeLanes[from];
+    if (!moved || activeLanes[to] !== "") return;
+    activeLanes[to] = moved;
+    laneColors[to] = laneColors[from];
+    activeLanes[from] = "";
+    (shifts[moved] = shifts[moved] || []).push({ row, from, to });
+  };
+
+  const madeMoves = new Map();
+  const recordMove = (row, from, to) => {
+    if (!madeMoves.has(row)) madeMoves.set(row, []);
+    madeMoves.get(row).push({ from, to });
+  };
+
+  const compactLanes = (row, protect) => {
+    if (frozen && row <= frozen.upTo) {
+      /* Replay, do not re-decide. Everything above this row was drawn with
+         these exact moves, so repeating them reproduces that picture byte for
+         byte — which is the whole point. */
+      for (const m of frozen.moves.get(row) || []) {
+        applyMove(row, m.from, m.to);
+        recordMove(row, m.from, m.to);
+      }
+      while (activeLanes.length && activeLanes[activeLanes.length - 1] === "") {
+        activeLanes.pop(); laneColors.pop();
+      }
+      return;
+    }
+    for (let idx = 0; idx < activeLanes.length; idx++) {
+      if (activeLanes[idx] !== "" || idx === protect) continue;
+      let j = idx + 1;
+      while (j < activeLanes.length && activeLanes[j] === "") j++;
+      if (j >= activeLanes.length) break;
+      if (j === protect || !worthMoving(activeLanes[j], row)) continue;
+      applyMove(row, j, idx);
+      recordMove(row, j, idx);
+    }
+    while (activeLanes.length && activeLanes[activeLanes.length - 1] === "") {
+      activeLanes.pop(); laneColors.pop();
+    }
+  };
+
+  activeLanes.push(commits[0].h);
+  laneColors.push(pickColor());
+
+  commits.forEach((commit, index) => {
+    const y = PAD_TOP + index * ROW_HEIGHT;
+    const existing = activeLanes.indexOf(commit.h);
+    const lane = existing !== -1 ? existing : claimLane();
+    if (lane > widest) widest = lane;
+    layouts[commit.h] = { x: laneX(lane), y, lane, index, colorIndex: laneColors[lane] ?? 0 };
+    if (commit.p.length > 0) {
+      activeLanes[lane] = commit.p[0];
+      for (let i = 1; i < commit.p.length; i++) activeLanes[claimLane()] = commit.p[i];
+    } else activeLanes[lane] = "";
+    for (let i = 0; i < activeLanes.length; i++) {
+      if (i !== lane && activeLanes[i] === commit.h) activeLanes[i] = "";
+    }
+    if (commit.p.length === 0) activeLanes[lane] = "";
+    if (compact) compactLanes(index, commit.p.length === 0 ? -1 : lane);
+  });
+
+  const edges = [];
+  commits.forEach((commit, index) => {
+    const child = layouts[commit.h];
+    if (!child) return;
+    commit.p.forEach((ph, pi) => {
+      const parent = layouts[ph];
+      if (!parent) return;
+      const moves = pi === 0
+        ? (shifts[ph] || []).filter((s) => s.row > index && s.row <= parent.index)
+        : [];
+      edges.push({
+        cx: child.x, cy: child.y, px: parent.x, py: parent.y,
+        parentIndex: parent.index,
+        colorIndex: child.lane >= parent.lane ? child.colorIndex : parent.colorIndex,
+        moves,
+      });
+    });
+  });
+  /* Everything landing on one commit bends over the same vertical run.
+     Left alone each would be clamped by the distance to its *own* node, so a
+     branch whose last commit sits one row above the merge bends over 36px
+     while its neighbour two rows up bends over 54 — two lines arriving at the
+     same place, starting their turn at different heights. They are one merge,
+     so they share the tightest of them. */
+  const perParent = new Map();
+  edges.forEach((e) => {
+    if (e.px === e.cx) return;
+    const want = Math.min(bendLength(e), e.py - e.cy);
+    const cur = perParent.get(e.parentIndex);
+    if (cur === undefined || want < cur) perParent.set(e.parentIndex, want);
+  });
+  edges.forEach((e) => {
+    if (e.px !== e.cx) e.bend = perParent.get(e.parentIndex);
+  });
+
+  /* Every lane handing over on the same row does it over the same vertical
+     run. Left to themselves each would use whatever space it happens to have
+     before its own next node, so two lanes yielding side by side would bend
+     over different distances — visibly out of step for something that is one
+     event. The row's length is the tightest of them. */
+  const jogLen = new Map();
+  edges.forEach((e) => {
+    (e.moves || []).forEach((m) => {
+      const freedY = PAD_TOP + m.row * ROW_HEIGHT;
+      const want = bendLength({ cx: laneX(m.from), px: laneX(m.to) });
+      const len = Math.min(want, e.py - freedY);
+      const cur = jogLen.get(m.row);
+      if (cur === undefined || len < cur) jogLen.set(m.row, len);
+    });
+  });
+  edges.forEach((e) => {
+    (e.moves || []).forEach((m) => { m.len = jogLen.get(m.row); });
+  });
+
+  return { layouts, edges, widest, madeMoves };
+}
+
+function bendLength(e) {
+  return Math.min(Math.abs(e.px - e.cx) * BEND.ratio, ROW_HEIGHT * BEND.capRows);
+}
+
+/**
+ * How hard the line holds its own lane before turning — eased as the crossing
+ * widens (shape B).
+ *
+ * The turn's height is fixed, so a three-lane crossing covers three times the
+ * distance in the same vertical run. Keeping the one-lane setting there does
+ * not read as the same curve made wider: the control points are crossed over,
+ * and with that much further to travel the line swings into a wobble. Easing
+ * toward 0.5 — plain symmetric control points — lets a wide crossing settle
+ * into the clean diagonal it actually is, while a one-lane step keeps the
+ * rounder corner it was tuned for.
+ */
+function curveFor(dx) {
+  const lanes = Math.max(1, Math.abs(dx) / LANE_W);
+  return 0.5 + (BEND.curve - 0.5) / lanes;
+}
+
+function edgePath(e) {
+  const { cx, cy, px, py } = e;
+  if (px === cx) return `M ${cx} ${cy} L ${px} ${py}`;
+  /* `e.bend` is the height shared by everything meeting this commit. */
+  const b = Math.min(e.bend === undefined ? bendLength(e) : e.bend, py - cy);
+  const k = curveFor(px - cx);
+  if (px < cx) {
+    const ty = py - b;
+    return `M ${cx} ${cy} L ${cx} ${ty} C ${cx} ${ty + b * k}, ${px} ${py - b * k}, ${px} ${py}`;
+  }
+  const by = cy + b;
+  return `M ${cx} ${cy} C ${cx} ${cy + b * k}, ${px} ${by - b * k}, ${px} ${by} L ${px} ${py}`;
+}
+function shiftedPath(e) {
+  const moves = e.moves || [];
+  if (!moves.length) return edgePath(e);
+  let d = `M ${e.cx} ${e.cy}`, x = e.cx, yAt = e.cy;
+  for (const m of moves.slice().sort((a, b) => a.row - b.row)) {
+    const freed = PAD_TOP + m.row * ROW_HEIGHT;
+    const nx = laneX(m.to);
+    if (nx === x || freed < yAt || laneX(m.from) !== x) continue;
+    /* The row's shared length, so lanes yielding together stay in step. */
+    const room = m.len === undefined ? Math.min(bendLength({ cx: x, px: nx }), e.py - freed) : m.len;
+    if (room <= 0) continue;
+    const k = curveFor(nx - x);
+    if (freed > yAt) d += ` L ${x} ${freed}`;
+    d += ` C ${x} ${freed + room * k}, ${nx} ${freed + room - room * k}, ${nx} ${freed + room}`;
+    x = nx; yAt = freed + room;
+  }
+  const rest = edgePath({ cx: x, cy: yAt, px: e.px, py: e.py, bend: e.bend });
+  return d + " " + rest.replace(/^M [^ ]+ [^ ]+/, "L " + x + " " + yAt);
+}
+
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/* ---- candidate turn shapes, for picking one ---- */
+const H1 = Math.min(LANE_W * BEND.ratio, ROW_HEIGHT * BEND.capRows); // the one-lane height
+
+/** A: one cubic, height fixed. The wide one is the narrow one stretched. */
+function shapeA(dx, k) {
+  const b = H1;
+  return { b, d: (x, ty) => `C ${x} ${ty + b * k}, ${x + dx} ${ty + b - b * k}, ${x + dx} ${ty + b}` };
+}
+/** B: same, with the S softened as the crossing widens. */
+function shapeB(dx) {
+  return shapeA(dx, curveFor(dx));
+}
+/**
+ * D: two quarter turns with a flat middle, height fixed at the one-lane value.
+ *
+ * A flat middle only works if the corner *ends* flat. Splitting the one-lane S
+ * in half and inserting a horizontal run — which an earlier attempt did — joins
+ * a sloped tangent to a level one and puts a visible kink at each end of the
+ * middle. So the corner here is a real quarter turn, vertical to horizontal,
+ * and the two of them meet the flat run smoothly.
+ */
+const ARC = 0.5523; // cubic approximation of a quarter arc
+function shapeD(dx) {
+  const dxUnit = Math.sign(dx) * Math.min(Math.abs(dx), LANE_W);
+  const extraX = dx - dxUnit;
+  const rx = dxUnit / 2;
+  /* Proportioned, not stretched to fill the one-lane height. Forcing that
+     height on top of a flat middle would make each corner 27px tall and 7px
+     wide — a long lean rather than a corner, which is what a flat middle costs
+     you: it consumes no vertical distance, so the corners must swallow all of
+     it. The three wishes (same height, flat middle, round corners) cannot all
+     hold at once; this drops the first. */
+  const ry = Math.min(H1 / 2, Math.abs(rx) * 2);
+  const b = ry * 2;
+  return {
+    b,
+    d: (x, ty) => {
+      const p = (px, py) => `${x + px} ${ty + py}`;
+      /* down → across */
+      let s = `C ${p(0, ry * ARC)}, ${p(rx - rx * ARC, ry)}, ${p(rx, ry)}`;
+      if (extraX !== 0) s += ` L ${p(rx + extraX, ry)}`;
+      /* across → down */
+      s += ` C ${p(rx + extraX + rx * ARC, ry)}, ${p(dx, b - ry * ARC)}, ${p(dx, b)}`;
+      return s;
+    },
+  };
+}
+
+const CANDIDATES = [
+  { id: "A", color: "#e0555f", name: "A · 定高單曲線",
+    desc: "跨幾條都一樣高，寬的就是窄的<b>橫向拉開</b>。起彎點不變，但線在同樣高度內要甩三倍遠。",
+    fn: (dx) => shapeA(dx, BEND.curve) },
+  { id: "B", color: "#e3712f", name: "B · 定高＋S 放軟（採用）",
+    desc: "一樣高，但跨得越寬 S 越<b>收斂成斜線</b>，不再是被拉扁的 S。",
+    fn: shapeB },
+  { id: "D", color: "#3b8ee0", name: "D · 圓角＋平中段",
+    desc: "垂直轉水平的真正圓角，中間走平。<b>但平的中段不吃垂直距離</b>，圓角要比例正常，總高就只剩 28px——起彎點反而比其他三個低很多。三個條件湊不齊。",
+    fn: shapeD },
+];
+
+(function drawShapes() {
+  const host = document.getElementById("shapes");
+  /* The situation from the screenshot, at the real geometry: a trunk, a branch
+     one lane out, and a branch three lanes out, all meeting the same commit. */
+  const ROWS = 6;
+  const x0 = 44;                       // trunk
+  const top = 20;
+  const merge = top + (ROWS - 1) * ROW_HEIGHT;
+  const W = 210, HGT = merge + 34;
+  const one = CANDIDATES[0].fn(-LANE_W);   // identical across all four
+
+  const g = [`<svg width="100%" viewBox="0 0 ${W} ${HGT}" style="display:block;max-width:${W}px">`];
+  /* trunk */
+  g.push(`<path d="M ${x0} ${top - 12} L ${x0} ${HGT - 8}" stroke="${PALETTE[0]}" stroke-width="2" fill="none" opacity=".7"/>`);
+  /* the one-lane branch — all four agree here, so it is drawn once */
+  const x1 = x0 + LANE_W;
+  g.push(`<path d="M ${x1} ${top} L ${x1} ${merge - one.b} ${one.d(x1, merge - one.b)}" fill="none" stroke="#85827b" stroke-width="2"/>`);
+  g.push(`<circle cx="${x1}" cy="${top}" r="4.5" fill="#85827b" stroke="${SURFACE}" stroke-width="1.5"/>`);
+  /* the three-lane branch, once per candidate, stacked */
+  const x3 = x0 + 3 * LANE_W;
+  CANDIDATES.forEach((c) => {
+    const s = c.fn(-3 * LANE_W);
+    g.push(`<path d="M ${x3} ${top} L ${x3} ${merge - s.b} ${s.d(x3, merge - s.b)}" fill="none" stroke="${c.color}" stroke-width="2" opacity=".9"/>`);
+  });
+  g.push(`<circle cx="${x3}" cy="${top}" r="4.5" fill="#85827b" stroke="${SURFACE}" stroke-width="1.5"/>`);
+  /* the commit they all land on */
+  g.push(`<circle cx="${x0}" cy="${merge}" r="5.5" fill="${PALETTE[0]}" stroke="${SURFACE}" stroke-width="2"/>`);
+  g.push(`</svg>`);
+
+  const legend = CANDIDATES.map((c) => `<div class="legend-row">
+      <span class="sw" style="background:${c.color}"></span>
+      <span class="txt"><span class="nm">${c.name}</span><span class="ds">${c.desc}</span></span>
+    </div>`).join("");
+
+  host.innerHTML = g.join("") + `<div class="legend">${legend}</div>`;
+})();
+
+/* ---- state ---- */
+let loaded = PAGE;
+let previous = null;   // hash -> lane, from the render before the last load
+let movedNow = {};     // hash -> {from, to}
+/* The decisions already on screen, kept so they can be replayed rather than
+   re-decided. `upTo` is the last row the reader has actually seen. */
+let frozen = { upTo: -1, moves: new Map() };
+
+const compactBox = document.getElementById("compact");
+const lookSel = document.getElementById("look");
+const shapeSel = document.getElementById("shape");
+const freezeBox = document.getElementById("freeze");
+const moreBtn = document.getElementById("more");
+const resetBtn = document.getElementById("reset");
+const tally = document.getElementById("tally");
+
+/**
+ * Lay out the visible rows plus a lookahead that is never drawn.
+ *
+ * The decision only ever asks "does this lane survive MIN_RUN more rows", so
+ * knowing MIN_RUN rows past the last visible one answers it exactly — either
+ * the lane closed inside the window, or it is still open there and therefore
+ * long. Anything the extra rows change about themselves is invisible, because
+ * they are not rendered.
+ */
+function layoutFor(visible) {
+  const look = Number(lookSel.value);
+  const all = HISTORY.slice(0, Math.min(HISTORY.length, visible + look));
+  return computeLayout(all, compactBox.checked, freezeBox.checked ? frozen : null);
+}
+
+function draw() {
+  const commits = HISTORY.slice(0, loaded);
+  const layout = layoutFor(loaded);
+  let widest = 0;
+  commits.forEach((c) => {
+    const l = layout.layouts[c.h];
+    if (l && l.lane > widest) widest = l.lane;
+  });
+  const gw = gutterWidth(widest + 1);
+  const height = PAD_TOP + commits.length * ROW_HEIGHT;
+
+  const lastY = PAD_TOP + (commits.length - 1) * ROW_HEIGHT;
+  const svg = [`<svg width="${gw}" height="${height}" viewBox="0 0 ${gw} ${height}" aria-hidden="true" style="display:block">`];
+  layout.edges.forEach((e) => {
+    /* Edges into the lookahead are clipped by the viewBox anyway; skip the
+       ones that start below it so nothing is drawn for rows nobody sees. */
+    if (e.cy > lastY) return;
+    svg.push(`<path d="${e.moves && e.moves.length ? shiftedPath(e) : edgePath(e)}" fill="none" stroke="${PALETTE[e.colorIndex]}" stroke-width="2" opacity=".85"/>`);
+  });
+  commits.forEach((c) => {
+    const l = layout.layouts[c.h];
+    if (!l) return;
+    if (c.head) {
+      svg.push(`<circle cx="${l.x}" cy="${l.y}" r="10" fill="none" stroke="${ACCENT}" stroke-width="3" opacity=".26"/>`);
+      svg.push(`<circle cx="${l.x}" cy="${l.y}" r="6" fill="${ACCENT}" stroke="${SURFACE}" stroke-width="2"/>`);
+    } else {
+      svg.push(`<circle cx="${l.x}" cy="${l.y}" r="5" fill="${PALETTE[l.colorIndex]}" stroke="${SURFACE}" stroke-width="2"/>`);
+    }
+  });
+  svg.push("</svg>");
+
+  const rows = commits.map((c, i) => {
+    const l = layout.layouts[c.h];
+    const mv = movedNow[c.h];
+    const chip = c.ref ? `<span class="chip${c.head ? " head" : ""}">${esc(c.ref)}</span>` : "";
+    const badge = mv ? `<span class="badge">欄 ${mv.from} → ${mv.to}</span>` : "";
+    const fresh = i >= PAGE && loaded > PAGE ? `<span class="fresh">新載入</span>` : "";
+    return `<div class="grow${mv ? " moved" : ""}" style="top:${l.y}px;padding-left:${gw}px">
+      <span class="hash">${c.h}</span>${chip}${badge}${fresh}<span class="msg">${esc(c.m)}</span>
+    </div>`;
+  }).join("");
+
+  const mark = loaded > PAGE
+    ? `<div class="pagemark" style="top:${PAD_TOP + (PAGE - 0.5) * ROW_HEIGHT}px"><span>第一頁到此為止</span></div>`
+    : "";
+
+  document.getElementById("graph").innerHTML =
+    `<div style="position:relative;min-width:760px;height:${height + 14}px">
+       <div style="position:absolute;left:0;top:0;width:${gw}px;height:${height}px">${svg.join("")}</div>
+       <div class="rowlist">${rows}</div>${mark}
+     </div>`;
+
+  const look = Number(lookSel.value);
+  document.getElementById("cap").textContent =
+    `畫出 ${loaded} / ${HISTORY.length} 列 · ${widest + 1} 條 lane · ` +
+    `lane 讓位 ${compactBox.checked ? "開" : "關"} · 預先多載入 ${look} 筆`;
+
+  return layout;
+}
+
+/** Only the rows on screen: the lookahead has no rendered position to change. */
+function lanesOf(layout, visible) {
+  const out = {};
+  HISTORY.slice(0, visible).forEach((c) => {
+    const l = layout.layouts[c.h];
+    if (l) out[c.h] = l.lane;
+  });
+  return out;
+}
+
+function setTally(n, loadedYet) {
+  if (!loadedYet) {
+    tally.className = "tally zero";
+    tally.textContent = "尚未載入第二頁";
+    return;
+  }
+  if (n === 0) {
+    tally.className = "tally zero";
+    tally.textContent = "載入後換欄位的列:0";
+  } else {
+    tally.className = "tally hit";
+    tally.textContent = `載入後換欄位的列:${n}`;
+  }
+}
+
+/** Keep the decisions for every row the reader has now seen. */
+function freezeUpTo(layout, visible) {
+  const moves = new Map();
+  layout.madeMoves.forEach((list, row) => {
+    if (row <= visible - 1) moves.set(row, list.map((m) => ({ ...m })));
+  });
+  frozen = { upTo: visible - 1, moves };
+}
+
+function reset() {
+  HISTORY = shapeSel.value === "tail" ? HISTORY_TAIL : HISTORY_PLAIN;
+  loaded = PAGE;
+  movedNow = {};
+  frozen = { upTo: -1, moves: new Map() };
+  moreBtn.disabled = false;
+  const layout = draw();
+  previous = lanesOf(layout, loaded);
+  freezeUpTo(layout, loaded);
+  setTally(0, false);
+}
+
+moreBtn.addEventListener("click", () => {
+  const before = previous;
+  const shownBefore = loaded;
+  loaded = Math.min(HISTORY.length, loaded + PAGE);
+  movedNow = {};
+  /* Compare only the rows that were already on screen: new rows cannot have
+     "changed", and those are not what this page is asking about. */
+  const layout = layoutFor(loaded);
+  Object.keys(before).forEach((h) => {
+    const now = layout.layouts[h];
+    if (now && now.lane !== before[h]) movedNow[h] = { from: before[h], to: now.lane };
+  });
+  void shownBefore;
+  const after = draw();
+  previous = lanesOf(after, loaded);
+  freezeUpTo(after, loaded);
+  setTally(Object.keys(movedNow).length, true);
+  if (loaded >= HISTORY.length) moreBtn.disabled = true;
+});
+
+resetBtn.addEventListener("click", reset);
+compactBox.addEventListener("change", reset);
+lookSel.addEventListener("change", reset);
+shapeSel.addEventListener("change", reset);
+freezeBox.addEventListener("change", reset);
+reset();
+</script>
+
+</body>
+</html>

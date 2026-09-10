@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>tempo-term issue mockups</title>
+<style>
+  :root {
+    --bg: #222222;
+    --bg-elevated: #292929;
+    --bg-inset: #222222;
+    --border: #333333;
+    --border-strong: #454545;
+    --fg: #dbd7ca;
+    --fg-muted: #bfbaaa;
+    --fg-subtle: #85827b;
+    --accent: #5eaab5;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  ::selection { background: transparent; }
+  body {
+    background: #181818;
+    color: var(--fg);
+    font-family: "Segoe UI", "Noto Sans TC", sans-serif;
+    font-size: 13px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    align-items: flex-start;
+  }
+  svg.i { flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  .figure { background: #181818; padding: 16px; }
+  .fig-label {
+    display: inline-block;
+    font-size: 11px;
+    color: var(--fg-subtle);
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    padding: 2px 8px;
+    margin-bottom: 8px;
+    font-family: Consolas, monospace;
+  }
+  .fig-label.after { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+
+  /* ============ toolbar ============ */
+  .toolbar {
+    width: 960px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid var(--border);
+    background: var(--bg-inset);
+    border-radius: 8px;
+    padding: 8px 12px;
+  }
+  .tb-group { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .toolbar.overflow-demo > * { flex: none; }
+  .combo-fixed {
+    width: 340px;
+    display: flex; align-items: center; gap: 6px;
+    border: 1px solid var(--border-strong); border-radius: 6px;
+    background: var(--bg);
+    padding: 3px 8px;
+    color: var(--fg-muted); font-size: 13px;
+  }
+  .combo-fixed .val { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .combo-fixed .chev { color: var(--fg-subtle); flex: none; display: flex; }
+  .tb-field { display: flex; align-items: center; gap: 6px; color: var(--fg-subtle); font-size: 12px; white-space: nowrap; min-width: 0; }
+  .combo {
+    display: flex; align-items: center; gap: 4px;
+    color: var(--fg-muted); font-size: 13px;
+    padding: 2px 4px; border-radius: 4px; white-space: nowrap;
+  }
+  .combo:hover { background: var(--bg-elevated); }
+  .checkbox { display: flex; align-items: center; gap: 6px; color: var(--fg-muted); font-size: 12px; white-space: nowrap; }
+  .cb-box { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--fg-subtle); background: var(--accent); border-color: var(--accent); display: flex; align-items: center; justify-content: center; color: #fff; }
+  .icon-btn { padding: 6px; border-radius: 4px; color: var(--fg-subtle); display: flex; }
+  .head-btn {
+    margin-left: 4px; white-space: nowrap; border-radius: 4px; padding: 2px 4px;
+    font-family: Consolas, monospace; font-size: 11px; color: var(--fg-subtle);
+  }
+  .overflow-mark { color: #e5534b; font-size: 11px; font-family: Consolas, monospace; white-space: nowrap; }
+  .accent-text { color: var(--accent); }
+
+  /* ============ status bar ============ */
+  .statusbar {
+    width: 960px;
+    display: flex; align-items: center; gap: 4px;
+    height: 28px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-inset);
+    padding: 0 8px;
+    font-size: 12px; color: var(--fg-muted);
+  }
+  .sb-stats { margin-left: 8px; display: flex; gap: 12px; font-family: Consolas, monospace; color: var(--fg-subtle); font-size: 11px; }
+  .sb-stat { display: flex; align-items: center; gap: 4px; }
+  .sb-right { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+  .sb-item { display: flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; color: var(--fg-subtle); font-size: 12px; }
+  .sb-branch {
+    display: flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px;
+    color: var(--fg-muted); font-size: 11px; font-family: Consolas, monospace;
+    outline: 1px dashed var(--accent); outline-offset: 2px;
+  }
+  .callout { position: relative; }
+  .callout .note {
+    position: absolute; top: -30px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: #10282c; font-size: 11px; font-weight: 600;
+    border-radius: 4px; padding: 2px 8px; white-space: nowrap;
+  }
+  .callout .note::after {
+    content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%);
+    border: 4px solid transparent; border-top-color: var(--accent);
+  }
+
+  /* ============ sidebar ============ */
+  .panels { display: flex; gap: 28px; align-items: flex-start; }
+  .panel-wrap { display: flex; flex-direction: column; gap: 8px; }
+  .panel {
+    width: 300px; height: 330px;
+    background: var(--bg-inset);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+  .panel-header {
+    height: 36px; flex: none;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    padding: 0 12px;
+  }
+  .panel-title { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-subtle); }
+  .panel-header .actions { display: flex; gap: 2px; color: var(--fg-muted); }
+  .panel-header .actions .icon-btn { padding: 4px; }
+  .branch-row {
+    display: flex; align-items: center; gap: 6px;
+    padding: 8px 12px; font-size: 12px; color: var(--fg-muted);
+    font-family: Consolas, monospace;
+  }
+  .branch-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .branch-btn {
+    margin: 6px 12px 2px;
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 8px; font-size: 12px; color: var(--fg);
+    font-family: Consolas, monospace;
+    border: 1px solid var(--border-strong); border-radius: 6px;
+    background: var(--bg-elevated);
+  }
+  .branch-btn .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .branch-btn .chev { margin-left: auto; color: var(--fg-subtle); }
+  .commit-box { margin: 8px 12px 0; position: relative; }
+  .commit-box textarea-mock, .ta {
+    display: block; width: 100%; height: 52px;
+    border: 1px solid var(--border); border-radius: 6px; background: var(--bg);
+    color: var(--fg-subtle); font-size: 13px; padding: 6px 30px 6px 8px;
+  }
+  .ta { display: flex; align-items: flex-start; }
+  .commit-box .spark { position: absolute; right: 6px; top: 6px; color: var(--fg-muted); }
+  .commit-actions { display: flex; gap: 8px; margin: 8px 12px 0; }
+  .btn-commit { flex: 1; background: var(--accent); color: #fff; border-radius: 6px; text-align: center; padding: 6px 0; font-size: 13px; font-weight: 500; }
+  .btn-push { display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; color: var(--fg-muted); font-size: 13px; }
+  .section-label { margin: 14px 12px 4px; font-size: 11px; color: var(--fg-subtle); display: flex; align-items: center; gap: 6px; }
+  .file-row { display: flex; align-items: center; gap: 8px; padding: 3px 12px; font-size: 12px; color: var(--fg-muted); font-family: Consolas, monospace; }
+  .file-row .st-m { color: #d4a72c; margin-left: auto; }
+  .file-row .st-a { color: #57ab5a; margin-left: auto; }
+
+  /* dropdown menu */
+  .menu {
+    position: absolute; left: 12px; right: 12px; top: 76px; z-index: 10;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+    padding: 4px;
+  }
+  .menu .search {
+    display: flex; align-items: center; gap: 6px;
+    border: 1px solid var(--border-strong); border-radius: 4px;
+    background: var(--bg); color: var(--fg-subtle);
+    padding: 4px 8px; font-size: 12px; margin-bottom: 4px;
+  }
+  .menu .search .caret { color: var(--fg); }
+  .menu-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px; border-radius: 4px;
+    font-family: Consolas, monospace; font-size: 12px; color: var(--fg-muted);
+  }
+  .menu-item.hover { background: var(--bg-inset); color: var(--fg); }
+  .menu-item .check { margin-left: auto; color: var(--accent); }
+  .menu-item.disabled { opacity: .45; }
+  .menu-item .wt-tag { margin-left: auto; font-size: 10px; color: var(--fg-subtle); font-family: "Segoe UI", sans-serif; }
+  .menu-sep { border-top: 1px solid var(--border); margin: 4px 0; }
+  .panel-note { font-size: 12px; color: var(--fg-subtle); padding-left: 2px; }
+  .panel-note b { color: var(--accent); font-weight: 600; }
+
+  /* ============ centered palette (fig 4) ============ */
+  .app-window {
+    width: 960px; height: 460px;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    display: flex;
+    position: relative;
+    overflow: hidden;
+  }
+  .app-side {
+    width: 250px; flex: none;
+    background: var(--bg-inset);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+  }
+  .app-main { flex: 1; padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+  .ghost-line { height: 10px; border-radius: 5px; background: var(--bg-elevated); }
+  .dim {
+    position: absolute; inset: 0;
+    background: rgba(0,0,0,.4);
+    display: flex; justify-content: center;
+    padding-top: 48px;
+  }
+  .palette {
+    width: 560px; height: fit-content;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 24px 60px rgba(0,0,0,.6);
+  }
+  .palette-search {
+    display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid var(--border);
+    padding: 10px 12px;
+    color: var(--fg-subtle); font-size: 13px;
+  }
+  .palette-list { padding: 4px; }
+  .palette-list .menu-item { padding: 6px 8px; font-size: 13px; }
+
+  /* ============ ref chips (fig 5) ============ */
+  .graph-row {
+    width: 960px;
+    display: flex; align-items: center; gap: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 12px;
+    overflow: hidden;
+  }
+  .graph-row .lane { flex: none; display: flex; align-items: center; width: 34px; }
+  .graph-row .node { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--bg); box-shadow: 0 0 0 2px rgba(0,0,0,.25); }
+  .graph-row .hash { flex: none; font-family: Consolas, monospace; font-size: 12px; font-weight: 600; color: var(--accent); }
+  .graph-row .chips { display: flex; align-items: center; gap: 8px; flex: none; }
+  .chip {
+    display: flex; align-items: center; gap: 3px;
+    border-radius: 4px; border: 1px solid;
+    padding: 2px 6px; font-size: 12px; font-weight: 500;
+    white-space: nowrap;
+  }
+  .chip-head { border-color: rgba(87,171,90,.4); background: rgba(87,171,90,.15); color: #57ab5a; }
+  .chip-branch { border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+  .chip-remote { border-color: var(--border-strong); background: var(--bg-inset); color: var(--fg-subtle); }
+  .chip-tag { border-color: rgba(212,167,44,.4); background: rgba(212,167,44,.15); color: #d4a72c; }
+  .graph-row .msg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 500; color: var(--fg); }
+  .graph-row .meta { flex: none; display: flex; gap: 16px; font-family: Consolas, monospace; font-size: 12px; color: var(--fg-subtle); }
+</style>
+</head>
+<body>
+
+<!-- SVG symbol defs -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-branch" viewBox="0 0 24 24"><path d="M15 6a9 9 0 0 0-9 9V3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+    <symbol id="i-fetch" viewBox="0 0 24 24"><path d="M12 13v8l-4-4"/><path d="m12 21 4-4"/><path d="M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284"/></symbol>
+    <symbol id="i-settings2" viewBox="0 0 24 24"><path d="M14 17H5"/><path d="M19 7h-9"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+    <symbol id="i-funnel" viewBox="0 0 24 24"><path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></symbol>
+    <symbol id="i-spark" viewBox="0 0 24 24"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4"/><path d="M22 4h-4"/><circle cx="4" cy="20" r="2"/></symbol>
+    <symbol id="i-cloud-up" viewBox="0 0 24 24"><path d="M12 13v8"/><path d="m8 17 4-4 4 4"/><path d="M4.393 15.269A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.436 8.284"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><path d="M12 20v2"/><path d="M12 2v2"/><path d="M17 20v2"/><path d="M17 2v2"/><path d="M2 12h2"/><path d="M2 17h2"/><path d="M2 7h2"/><path d="M20 12h2"/><path d="M20 17h2"/><path d="M20 7h2"/><path d="M7 20v2"/><path d="M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol>
+    <symbol id="i-ram" viewBox="0 0 24 24"><path d="M12 12v-2"/><path d="M12 18v-2"/><path d="M16 12v-2"/><path d="M16 18v-2"/><path d="M2 11h1.5"/><path d="M20 18v-2"/><path d="M20.5 11H22"/><path d="M4 18v-2"/><path d="M8 12v-2"/><path d="M8 18v-2"/><rect x="2" y="6" width="20" height="10" rx="2"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-foldergit" viewBox="0 0 24 24"><path d="M18 19a5 5 0 0 1-5-5v8"/><path d="M9 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v5"/><circle cx="13" cy="12" r="2"/><circle cx="20" cy="19" r="2"/></symbol>
+    <symbol id="i-port" viewBox="0 0 24 24"><path d="m15 20 3-3h2a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h2l3 3z"/><path d="M6 8v1"/><path d="M10 8v1"/><path d="M14 8v1"/><path d="M18 8v1"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></symbol>
+    <symbol id="i-clip" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></symbol>
+  </defs>
+</svg>
+
+<!-- ============ 圖 1: Git Graph 工具列 前/後 ============ -->
+<div class="figure" id="fig-toolbar" role="img" aria-label="fig-toolbar">
+  <div class="fig-label">現況 — Git Graph 工具列(長分支名會把整排撐爆)</div>
+  <div class="toolbar" style="overflow:hidden;">
+    <div class="tb-group" style="min-width:0; flex:1; overflow:hidden; gap:8px;">
+      <div class="tb-field"><span>分支:</span>
+        <span class="combo">全部分支 <svg class="i" width="12" height="12"><use href="#i-chev"/></svg></span>
+      </div>
+      <div class="tb-field"><span>Worktree:</span>
+        <span class="combo">worktree-1 (feature/dashboard-widgets-drag-and-drop) <svg class="i" width="12" height="12"><use href="#i-chev"/></svg></span>
+      </div>
+      <span class="checkbox"><span class="cb-box"><svg class="i" width="9" height="9" style="stroke-width:3"><use href="#i-check"/></svg></span> 顯示遠端分支</span>
+    </div>
+    <div class="tb-group" style="gap:2px; flex:none;">
+      <span class="icon-btn"><svg class="i" width="16" height="16"><use href="#i-search"/></svg></span>
+      <span class="icon-btn"><svg class="i" width="16" height="16"><use href="#i-settings2"/></svg></span>
+      <span class="icon-btn"><svg class="i" width="16" height="16"><use href="#i-refresh"/></svg></span>
+      <span class="icon-btn"><svg class="i" width="16" height="16"><use href="#i-fetch"/></svg></span>
+      <span class="head-btn">HEAD: feature/dashboard-widgets-drag-and-drop</span>
+    </div>
+  </div>
+  <div style="height:20px"></div>
+  <div class="fig-label after">提案 A — 拿掉 Worktree 下拉與 HEAD 按鈕;「顯示遠端分支」留在原位</div>
+  <div class="toolbar">
+    <div class="tb-group">
+      <div class="tb-field">
+        <span>篩選:</span>
+        <span class="combo-fixed"><span class="val">全部分支</span><span class="chev"><svg class="i" width="12" height="12"><use href="#i-chev"/></svg></span></span>
+      </div>
+      <span class="checkbox"><span class="cb-box"><svg class="i" width="9" height="9" style="stroke-width:3"><use href="#i-check"/></svg></span> 顯示遠端分支</span>
+    </div>
+    <div class="tb-group" style="gap:2px;">
+      <span class="icon-btn"><svg class="i" width="16" height="16"><use href="#i-search"/></svg></span>
+      <span class="icon-btn"><svg class="i" width="16" height="16"><use href="#i-settings2"/></svg></span>
+      <span class="icon-btn"><svg class="i" width="16" height="16"><use href="#i-refresh"/></svg></span>
+      <span class="icon-btn"><svg class="i" width="16" height="16"><use href="#i-fetch"/></svg></span>
+    </div>
+  </div>
+  <div style="height:20px"></div>
+  <div class="fig-label after">提案 B — 「顯示遠端分支」收進 ⚙(圖為展開狀態);篩選固定寬度、選中分支時高亮並截斷</div>
+  <div class="toolbar" style="position:relative;">
+    <div class="tb-group">
+      <div class="tb-field">
+        <span>篩選:</span>
+        <span class="combo-fixed" style="border-color: color-mix(in srgb, var(--accent) 55%, transparent);"><span class="val" style="color: var(--accent);">feature/dashboard-widgets-drag-and-drop-with-extra…</span><span class="chev"><svg class="i" width="12" height="12"><use href="#i-chev"/></svg></span></span>
+      </div>
+    </div>
+    <div class="tb-group" style="gap:2px;">
+      <span class="icon-btn"><svg class="i" width="16" height="16"><use href="#i-search"/></svg></span>
+      <span class="icon-btn" style="background:var(--bg-elevated); color:var(--fg);"><svg class="i" width="16" height="16"><use href="#i-settings2"/></svg></span>
+      <span class="icon-btn"><svg class="i" width="16" height="16"><use href="#i-refresh"/></svg></span>
+      <span class="icon-btn"><svg class="i" width="16" height="16"><use href="#i-fetch"/></svg></span>
+    </div>
+    <div class="menu" style="left:auto; right:76px; top:40px; width:200px;">
+      <div class="menu-item" style="font-family:'Segoe UI','Noto Sans TC',sans-serif;">
+        <span>顯示遠端分支</span>
+        <span class="check"><svg class="i" width="13" height="13"><use href="#i-check"/></svg></span>
+      </div>
+      <div class="menu-item" style="font-family:'Segoe UI','Noto Sans TC',sans-serif;">
+        <span>顯示標籤</span>
+        <span class="check"><svg class="i" width="13" height="13"><use href="#i-check"/></svg></span>
+      </div>
+      <div class="menu-item" style="font-family:'Segoe UI','Noto Sans TC',sans-serif;">
+        <span>顯示 Stash</span>
+      </div>
+      <div class="menu-sep"></div>
+      <div class="menu-item" style="font-family:Consolas,monospace; font-size:11px; color:var(--fg-subtle);">提交排序</div>
+      <div class="menu-item" style="font-family:'Segoe UI','Noto Sans TC',sans-serif;">
+        <span>依時間</span>
+        <span class="check"><svg class="i" width="13" height="13"><use href="#i-check"/></svg></span>
+      </div>
+      <div class="menu-item" style="font-family:'Segoe UI','Noto Sans TC',sans-serif;">
+        <span>依拓撲</span>
+      </div>
+    </div>
+  </div>
+  <div style="height:225px"></div>
+</div>
+
+<!-- ============ 圖 2: 狀態列 ============ -->
+<div class="figure" id="fig-statusbar" role="img" aria-label="fig-statusbar" style="padding-top:48px;">
+  <div class="fig-label after">提案 — 底部狀態列新增分支指示器(常駐、無 repo 時隱藏);點擊同樣開啟置中分支面板</div>
+  <div class="statusbar">
+    <span class="sb-stats">
+      <span class="sb-stat"><svg class="i" width="11" height="11"><use href="#i-cpu"/></svg> 12.3%</span>
+      <span class="sb-stat"><svg class="i" width="11" height="11"><use href="#i-ram"/></svg> 48.1%</span>
+      <span class="sb-stat"><svg class="i" width="11" height="11"><use href="#i-down"/></svg> 1.2 MB/s</span>
+      <span class="sb-stat"><svg class="i" width="11" height="11"><use href="#i-up"/></svg> 0.3 MB/s</span>
+    </span>
+    <span class="sb-right">
+      <span class="callout sb-branch"><span class="note">新增</span><svg class="i" width="13" height="13"><use href="#i-branch"/></svg> feature/dashboard-wid…</span>
+      <span class="sb-item"><svg class="i" width="14" height="14" style="stroke-width:1.75"><use href="#i-clip"/></svg></span>
+      <span class="sb-item"><svg class="i" width="14" height="14" style="stroke-width:1.75"><use href="#i-foldergit"/></svg> 3</span>
+      <span class="sb-item"><svg class="i" width="14" height="14" style="stroke-width:1.75"><use href="#i-port"/></svg> 2</span>
+      <span class="sb-item"><svg class="i" width="14" height="14" style="stroke-width:1.75"><use href="#i-gear"/></svg></span>
+    </span>
+  </div>
+</div>
+
+<!-- ============ 圖 3: 原始碼控制側欄 ============ -->
+<div class="figure" id="fig-sidebar" role="img" aria-label="fig-sidebar">
+  <div class="panels">
+
+    <!-- (a) 現況 -->
+    <div class="panel-wrap">
+      <div class="fig-label">現況 — 分支只是純文字</div>
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">原始碼控制</span>
+          <span class="actions">
+            <span class="icon-btn"><svg class="i" width="14" height="14"><use href="#i-list"/></svg></span>
+            <span class="icon-btn"><svg class="i" width="14" height="14"><use href="#i-refresh"/></svg></span>
+          </span>
+        </div>
+        <div class="branch-row">
+          <svg class="i accent-text" width="13" height="13"><use href="#i-branch"/></svg>
+          <span class="name">feature/dashboard-widgets-drag-a…</span>
+        </div>
+        <div class="commit-box">
+          <span class="ta">提交訊息</span>
+          <span class="spark"><svg class="i" width="15" height="15" style="stroke-width:1.75"><use href="#i-spark"/></svg></span>
+        </div>
+        <div class="commit-actions">
+          <span class="btn-commit">提交</span>
+          <span class="btn-push"><svg class="i" width="14" height="14"><use href="#i-cloud-up"/></svg> 推送</span>
+        </div>
+        <div class="section-label"><svg class="i" width="12" height="12"><use href="#i-chev"/></svg> 已暫存 (1)</div>
+        <div class="file-row">src/App.tsx <span class="st-m">M</span></div>
+        <div class="section-label"><svg class="i" width="12" height="12"><use href="#i-chev"/></svg> 變更 (2)</div>
+        <div class="file-row">src/index.css <span class="st-m">M</span></div>
+        <div class="file-row">docs/README.md <span class="st-a">A</span></div>
+      </div>
+      <div class="panel-note">分支名稱不可互動</div>
+    </div>
+
+    <!-- (b) 提案 -->
+    <div class="panel-wrap">
+      <div class="fig-label after">提案 — 變成可點的切換按鈕</div>
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">原始碼控制</span>
+          <span class="actions">
+            <span class="icon-btn"><svg class="i" width="14" height="14"><use href="#i-list"/></svg></span>
+            <span class="icon-btn"><svg class="i" width="14" height="14"><use href="#i-refresh"/></svg></span>
+          </span>
+        </div>
+        <div class="branch-btn">
+          <svg class="i accent-text" width="13" height="13"><use href="#i-branch"/></svg>
+          <span class="name">feature/dashboard-widgets-dra…</span>
+          <span class="chev"><svg class="i" width="13" height="13"><use href="#i-chev"/></svg></span>
+        </div>
+        <div class="commit-box">
+          <span class="ta">提交訊息</span>
+          <span class="spark"><svg class="i" width="15" height="15" style="stroke-width:1.75"><use href="#i-spark"/></svg></span>
+        </div>
+        <div class="commit-actions">
+          <span class="btn-commit">提交</span>
+          <span class="btn-push"><svg class="i" width="14" height="14"><use href="#i-cloud-up"/></svg> 推送</span>
+        </div>
+        <div class="section-label"><svg class="i" width="12" height="12"><use href="#i-chev"/></svg> 已暫存 (1)</div>
+        <div class="file-row">src/App.tsx <span class="st-m">M</span></div>
+        <div class="section-label"><svg class="i" width="12" height="12"><use href="#i-chev"/></svg> 變更 (2)</div>
+        <div class="file-row">src/index.css <span class="st-m">M</span></div>
+        <div class="file-row">docs/README.md <span class="st-a">A</span></div>
+      </div>
+      <div class="panel-note">點擊 → 開啟置中的分支面板(見圖 4)</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ============ 圖 4: 置中分支面板 ============ -->
+<div class="figure" id="fig-palette" role="img" aria-label="fig-palette">
+  <div class="fig-label after">提案 — 點擊後開啟「視窗置中」的分支面板(同 Ctrl+P 檔案搜尋的呈現方式)</div>
+  <div class="app-window">
+    <!-- 背景 app 骨架 -->
+    <div class="app-side">
+      <div class="panel-title" style="padding:10px 12px;">原始碼控制</div>
+      <div class="branch-btn" style="margin-top:0; border-color: var(--accent);">
+        <svg class="i accent-text" width="13" height="13"><use href="#i-branch"/></svg>
+        <span class="name">feature/dashboard-wi…</span>
+        <span class="chev"><svg class="i" width="13" height="13"><use href="#i-chev"/></svg></span>
+      </div>
+      <div class="commit-box">
+        <span class="ta">提交訊息</span>
+      </div>
+      <div class="section-label"><svg class="i" width="12" height="12"><use href="#i-chev"/></svg> 已暫存 (1)</div>
+      <div class="file-row">src/App.tsx <span class="st-m">M</span></div>
+    </div>
+    <div class="app-main">
+      <div class="ghost-line" style="width:70%"></div>
+      <div class="ghost-line" style="width:55%"></div>
+      <div class="ghost-line" style="width:80%"></div>
+      <div class="ghost-line" style="width:40%"></div>
+      <div class="ghost-line" style="width:65%"></div>
+    </div>
+    <!-- 半透明遮罩 + 置中面板 -->
+    <div class="dim">
+      <div class="palette">
+        <div class="palette-search">
+          <svg class="i" width="15" height="15"><use href="#i-search"/></svg>
+          <span>搜尋分支…</span>
+        </div>
+        <div class="palette-list">
+          <div class="menu-item">
+            <svg class="i" width="13" height="13" style="color:var(--fg-subtle)"><use href="#i-branch"/></svg>
+            <span class="name">feature/dashboard-widgets-drag-and-drop</span>
+            <span class="check"><svg class="i" width="13" height="13"><use href="#i-check"/></svg></span>
+          </div>
+          <div class="menu-item hover">
+            <svg class="i" width="13" height="13" style="color:var(--fg-subtle)"><use href="#i-branch"/></svg>
+            <span class="name">master</span>
+          </div>
+          <div class="menu-item">
+            <svg class="i" width="13" height="13" style="color:var(--fg-subtle)"><use href="#i-branch"/></svg>
+            <span class="name">fix/login-form-validation</span>
+          </div>
+          <div class="menu-item disabled">
+            <svg class="i" width="13" height="13" style="color:var(--fg-subtle)"><use href="#i-branch"/></svg>
+            <span class="name">hotfix/csv-export</span>
+            <span class="wt-tag">已在 worktree-2 簽出</span>
+          </div>
+          <div class="menu-sep"></div>
+          <div class="menu-item">
+            <svg class="i" width="13" height="13" style="color:var(--fg-subtle)"><use href="#i-fetch"/></svg>
+            <span class="name">origin/master</span>
+          </div>
+          <div class="menu-item">
+            <svg class="i" width="13" height="13" style="color:var(--fg-subtle)"><use href="#i-fetch"/></svg>
+            <span class="name">origin/feature/settings-background-image</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="panel-note" style="margin-top:8px;">輸入即過濾;<b>被其他 worktree 佔用的分支反灰</b>並標註位置;遠端分支列在分隔線下,選了會先跳「建立追蹤分支」。側欄分支列與狀態列分支指示器都開這個面板</div>
+</div>
+
+<!-- ============ 圖 5: ref chips 同名合併 ============ -->
+<div class="figure" id="fig-refchips" role="img" aria-label="fig-refchips">
+  <div class="fig-label">現況 — 每個 ref 各畫一顆 chip,commit 訊息被擠掉</div>
+  <div class="graph-row">
+    <span class="lane"><span class="node" style="background: var(--accent); box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 60%, transparent);"></span></span>
+    <span class="hash">13f9a157b</span>
+    <span style="flex:1; min-width:0; overflow:hidden; display:flex; align-items:center; gap:12px;">
+      <span class="chips">
+        <span class="chip chip-head"><svg class="i" width="10" height="10" style="stroke-width:3"><use href="#i-check"/></svg>feature/dashboard-widgets-drag-and-drop</span>
+        <span class="chip chip-remote">origin/master</span>
+        <span class="chip chip-remote">origin/HEAD</span>
+        <span class="chip chip-remote">upstream/master</span>
+        <span class="chip chip-branch">master</span>
+        <span class="chip chip-branch">fix/login-form-validation</span>
+        <span class="chip chip-tag"><svg class="i" width="10" height="10"><use href="#i-tag"/></svg>v0.3.0</span>
+      </span>
+      <span class="msg">feat(editor): 加入拖曳排序</span>
+    </span>
+    <span class="meta"><span>ywchan</span><span>2026-01-01 12:00</span></span>
+  </div>
+  <div style="height:20px"></div>
+  <div class="fig-label after">提案 A — 同名 local+remote 合併成一顆(標註 remote 名稱)、origin/HEAD 隱藏</div>
+  <div class="graph-row">
+    <span class="lane"><span class="node" style="background: var(--accent); box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 60%, transparent);"></span></span>
+    <span class="hash">13f9a157b</span>
+    <span style="flex:1; min-width:0; overflow:hidden; display:flex; align-items:center; gap:12px;">
+      <span class="chips">
+        <span class="chip chip-head"><svg class="i" width="10" height="10" style="stroke-width:3"><use href="#i-check"/></svg>feature/dashboard-widgets-drag-and-drop</span>
+        <span class="chip chip-branch">master<span style="width:1px; align-self:stretch; background:currentColor; opacity:.35; margin:0 5px;"></span><span style="opacity:.75; font-weight:400;">origin</span><span style="width:1px; align-self:stretch; background:currentColor; opacity:.35; margin:0 5px;"></span><span style="opacity:.75; font-weight:400;">upstream</span></span>
+        <span class="chip chip-branch">fix/login-form-validation<span style="width:1px; align-self:stretch; background:currentColor; opacity:.35; margin:0 5px;"></span><span style="opacity:.75; font-weight:400;">origin</span></span>
+        <span class="chip chip-tag"><svg class="i" width="10" height="10"><use href="#i-tag"/></svg>v0.3.0</span>
+      </span>
+      <span class="msg">feat(editor): 加入拖曳排序</span>
+    </span>
+    <span class="meta"><span>ywchan</span><span>2026-01-01 12:00</span></span>
+  </div>
+  <div style="height:20px"></div>
+  <div class="fig-label after">提案 B — 在 A 之上,合併後仍超過 N 顆時其餘收合成 +N,點擊展開</div>
+  <div class="graph-row">
+    <span class="lane"><span class="node" style="background: var(--accent); box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 60%, transparent);"></span></span>
+    <span class="hash">13f9a157b</span>
+    <span class="chips">
+      <span class="chip chip-head"><svg class="i" width="10" height="10" style="stroke-width:3"><use href="#i-check"/></svg>feature/dashboard-widgets-drag-and-drop</span>
+      <span class="chip chip-branch">master<span style="width:1px; align-self:stretch; background:currentColor; opacity:.35; margin:0 5px;"></span><span style="opacity:.75; font-weight:400;">origin</span><span style="width:1px; align-self:stretch; background:currentColor; opacity:.35; margin:0 5px;"></span><span style="opacity:.75; font-weight:400;">upstream</span></span>
+      <span class="chip chip-remote" style="border-style:dashed;">+2</span>
+    </span>
+    <span class="msg">feat(editor): 加入拖曳排序</span>
+    <span class="meta"><span>ywchan</span><span>2026-01-01 12:00</span></span>
+  </div>
+  <div style="height:20px"></div>
+  <div class="fig-label after">提案 B — 點擊 +2 彈出下拉,列出其餘 refs(每項一樣可右鍵操作)</div>
+  <div class="graph-row" style="overflow:visible; position:relative;">
+    <span class="lane"><span class="node" style="background: var(--accent); box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 60%, transparent);"></span></span>
+    <span class="hash">13f9a157b</span>
+    <span class="chips">
+      <span class="chip chip-head"><svg class="i" width="10" height="10" style="stroke-width:3"><use href="#i-check"/></svg>feature/dashboard-widgets-drag-and-drop</span>
+      <span class="chip chip-branch">master<span style="width:1px; align-self:stretch; background:currentColor; opacity:.35; margin:0 5px;"></span><span style="opacity:.75; font-weight:400;">origin</span><span style="width:1px; align-self:stretch; background:currentColor; opacity:.35; margin:0 5px;"></span><span style="opacity:.75; font-weight:400;">upstream</span></span>
+      <span style="position:relative; display:flex;">
+        <span class="chip chip-remote" style="border-style:dashed; background:var(--bg-elevated); color:var(--fg);">+2</span>
+        <span class="menu" style="left:0; right:auto; top:calc(100% + 6px); width:auto; padding:6px; display:flex; flex-direction:column; align-items:flex-start; gap:6px;">
+          <span class="chip chip-branch">fix/login-form-validation<span style="width:1px; align-self:stretch; background:currentColor; opacity:.35; margin:0 5px;"></span><span style="opacity:.75; font-weight:400;">origin</span></span>
+          <span class="chip chip-tag"><svg class="i" width="10" height="10"><use href="#i-tag"/></svg>v0.3.0</span>
+        </span>
+      </span>
+    </span>
+    <span class="msg">feat(editor): 加入拖曳排序</span>
+    <span class="meta"><span>ywchan</span><span>2026-01-01 12:00</span></span>
+  </div>
+  <div style="height:86px"></div>
+  <div class="fig-label">補充 — 只有遠端指到的 commit,chip 維持 origin/ 前綴不變</div>
+  <div class="graph-row">
+    <span class="lane" style="padding-left:16px;"><span class="node" style="background:#e0823d;"></span></span>
+    <span class="hash">8c83adb73</span>
+    <span class="chips">
+      <span class="chip chip-remote">origin/feature/settings-background-image</span>
+    </span>
+    <span class="msg">feat(settings): 自訂背景圖片</span>
+    <span class="meta"><span>ywchan</span><span>2026-01-01 11:30</span></span>
+  </div>
+  <div class="panel-note" style="margin-top:10px;"><b>master │ origin</b> = origin 的同名分支也指向此 commit(同步);多個 remote 同時指到就串著標 <b>master │ origin │ upstream</b>;local 超前或落後時遠端 chip 會出現在它實際指向的 commit 上,不受影響</div>
+</div>
+
+</body>
+</html>

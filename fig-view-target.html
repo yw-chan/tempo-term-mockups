@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8">
+<title>Git 檢視目標 — 跟著哪個終端機</title>
+<link rel="stylesheet" href="mock.css"><style>
+.fig-label .n {
+  display: inline-block; width: 20px; height: 20px; line-height: 18px; text-align: center;
+  border-radius: 50%; border: 1px solid var(--accent); background: transparent;
+  color: var(--accent); font-family: "Segoe UI", sans-serif; font-size: 12px; font-weight: 700;
+  margin-right: 6px;
+}
+.legend { font-size: 12.5px; }
+.legend .lg-txt { flex: 1; min-width: 0; }
+.legend b { color: var(--fg); font-weight: 600; }
+.legend code { font-family: var(--mono); color: var(--fg-muted); font-size: 11px; }
+
+/* ---------- split panes ---------- */
+.panes { flex: 1; display: flex; min-height: 0; }
+.pane { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pane + .pane { border-left: 1px solid var(--border); }
+
+/* PaneHeader：分割時才出現。終端機有麵包屑，其他種類目前只有關閉鈕。 */
+.pheader {
+  height: 28px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 10px;
+  border-bottom: 1px solid var(--border); font-size: 11.5px; color: var(--fg-subtle);
+}
+.pheader .spacer { margin-left: auto; }
+.pheader .icon-btn { padding: 3px; }
+.crumb { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--fg-muted); min-width: 0; }
+.crumb .s { white-space: nowrap; }
+.crumb .g { color: var(--fg-subtle); }
+.crumb .last { color: var(--fg); }
+.pane.bound .pheader { box-shadow: inset 0 -2px 0 var(--accent); }
+.pane.bound .crumb .last { color: var(--accent); }
+
+/* ---------- git graph（分割寬度＝compact 模式） ---------- */
+.gbar { height: 40px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; }
+.gbar .lab { font-size: 12px; color: var(--fg-subtle); flex: none; }
+.combo.big { height: 30px; border-radius: 6px; width: auto; flex: 1; min-width: 0; font-family: inherit; font-size: 12.5px; }
+.graph { flex: 1; padding: 4px 0; }
+.crow { height: 25px; display: flex; align-items: center; gap: 8px; padding: 0 10px; font-family: var(--mono); font-size: 11.5px; color: var(--fg-muted); }
+.crow .lane { width: 14px; flex: none; display: flex; justify-content: center; color: #cb7676; }
+.crow .sha { color: var(--accent); font-weight: 600; flex: none; }
+.crow .msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: "Segoe UI", "Noto Sans TC", sans-serif; color: var(--fg-muted); }
+.crow.head .lane { color: var(--accent); }
+.chip {
+  flex: none; font-size: 10.5px; padding: 1px 6px; border-radius: 4px; font-family: var(--mono); white-space: nowrap;
+  border: 1px solid var(--border-strong); color: var(--fg-muted); background: var(--bg-elevated);
+}
+.chip.cur { border-color: color-mix(in srgb, var(--ok) 55%, transparent); color: var(--ok); }
+.chip.rem { color: var(--fg-subtle); font-style: italic; }
+
+/* ---------- terminal ---------- */
+.term { flex: 1; padding: 9px 12px; font-family: var(--mono); font-size: 12px; color: var(--fg-muted); display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
+.term div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.term .pr { color: var(--fg); }
+.term .arg { color: var(--warn); }
+.term .caret { display: inline-block; width: 7px; height: 12px; background: var(--fg-muted); vertical-align: -2px; }
+
+/* ---------- status bar ---------- */
+.sb {
+  height: 27px; flex: none; display: flex; align-items: center; gap: 4px;
+  border-top: 1px solid var(--border); background: var(--bg-inset); padding: 0 8px;
+  font-size: 12px; color: var(--fg-muted);
+}
+.sb-stats { margin-left: 6px; display: flex; gap: 12px; font-family: var(--mono); color: var(--fg-subtle); font-size: 11px; }
+.sb-stats span { display: flex; align-items: center; gap: 4px; }
+.sb-right { margin-left: auto; display: flex; align-items: center; gap: 3px; }
+.sb-item { display: flex; align-items: center; gap: 4px; padding: 2px 6px; border-radius: 4px; color: var(--fg-subtle); font-size: 11.5px; }
+
+/* ---------- THE control ---------- */
+.bind {
+  display: flex; align-items: center; gap: 5px; padding: 2px 7px; border-radius: 4px;
+  font-family: var(--mono); font-size: 11px; max-width: 260px; min-width: 0;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 13%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 42%, transparent);
+}
+.bind .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bind .bar { width: 1px; height: 11px; flex: none; background: color-mix(in srgb, var(--accent) 40%, transparent); }
+.bind .chev { display: flex; opacity: .6; }
+.bind.fallback { color: var(--fg-subtle); background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong); }
+.bind.fallback .bar { background: var(--border-strong); }
+.bind.wrong { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad) 52%, transparent); }
+.echo { display: flex; align-items: center; gap: 5px; padding: 2px 7px; border-radius: 4px; font-family: var(--mono); font-size: 11px; color: var(--fg-muted); max-width: 300px; }
+.echo .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.echo .bar { width: 1px; height: 11px; background: var(--border-strong); flex: none; }
+.echo.ctl { box-shadow: inset 0 0 0 1px var(--border-strong); }
+.echo.pinned { color: var(--accent); }
+.echo.pinned .bar { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+
+/* ---------- popup ---------- */
+.menu {
+  width: 330px; padding: 0; background: var(--bg-elevated);
+  border: 1px solid var(--border-strong); border-radius: 8px; box-shadow: 0 12px 28px rgba(0,0,0,.55);
+}
+.mi { display: flex; align-items: center; gap: 8px; padding: 5px 8px; margin: 0 4px; border-radius: 5px; font-size: 12px; color: var(--fg-muted); white-space: nowrap; }
+.mi.mono { font-family: var(--mono); }
+.mi .tick { width: 12px; flex: none; color: var(--accent); display: flex; }
+.mi .lbl { overflow: hidden; text-overflow: ellipsis; }
+.mi.on { background: rgba(255,255,255,.06); color: var(--fg); }
+.mi.off { color: var(--fg-subtle); }
+.mi.dis { color: var(--fg-subtle); opacity: .55; }
+.mi .hint { margin-left: auto; padding-left: 10px; flex: none; font-size: 10.5px; color: var(--fg-subtle); font-family: "Segoe UI", sans-serif; }
+.sep { height: 1px; background: var(--border); margin: 4px 6px; }
+.mhead { padding: 6px 12px 3px; font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--fg-subtle); }
+.pk-search { display: flex; align-items: center; gap: 7px; margin: 6px; padding: 5px 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--bg); color: var(--fg-subtle); font-size: 12px; }
+.caret2 { width: 1px; height: 13px; background: var(--accent); margin-left: -3px; }
+.pk-foot { border-top: 1px solid var(--border); padding: 7px 12px; font-size: 11px; color: var(--fg-subtle); line-height: 1.55; }
+
+/* ---------- helpers ---------- */
+.row2 { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.cell { display: flex; flex-direction: column; gap: 6px; }
+.cap { font-size: 11.5px; color: var(--fg-subtle); width: 1120px; }
+.cap.half { width: 551px; }
+.cap.free { width: auto; }
+.cap b { color: var(--fg); font-weight: 600; }
+.tagok { font-size: 10.5px; padding: 1px 6px; border-radius: 3px; font-family: "Segoe UI", sans-serif; color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 45%, transparent); }
+.strip2 { width: 1120px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+.strip2.half { width: 551px; }
+.arrow { width: 1120px; display: flex; align-items: center; gap: 10px; color: var(--fg-subtle); font-size: 12px; padding-left: 2px; }
+.arrow .k { font-family: var(--mono); color: var(--fg); }
+.verdict { font-size: 11.5px; display: flex; align-items: flex-start; gap: 6px; line-height: 1.5; }
+.verdict svg { margin-top: 2px; flex: none; }
+.verdict.no { color: var(--bad); }
+.verdict.ok { color: var(--ok); }
+
+.callout .note.up { top: auto; bottom: 30px; }
+.callout .note.up::after { bottom: auto; top: 100%; border-bottom-color: transparent; border-top-color: var(--accent); }
+.callout .note.left { right: auto; left: 0; }
+.callout .note.left::after { right: auto; left: 24px; }
+
+table.cmp { width: 1120px; border-collapse: collapse; font-size: 12px; }
+table.cmp th, table.cmp td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; vertical-align: top; }
+table.cmp th { background: var(--bg-elevated); color: var(--fg-subtle); font-size: 11px; font-weight: 600; }
+table.cmp td { color: var(--fg-muted); }
+table.cmp td b { color: var(--fg); }
+table.cmp tr.pick td { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+table.cmp .v { white-space: nowrap; font-weight: 600; }
+table.cmp .v.ok { color: var(--ok); }
+table.cmp .v.no { color: var(--bad); }
+table.cmp .v.meh { color: var(--warn); }
+table.cmp code { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); }
+
+.tab.dim { color: var(--fg-subtle); }
+.tabstrip .right { margin-left: auto; display: flex; align-items: center; gap: 6px; padding: 0 10px; color: var(--fg-subtle); }
+</style></head>
+
+<body>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-branch" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  <symbol id="i-foldergit" viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/><circle cx="12" cy="13" r="2"/><path d="M14 13h3"/><path d="M7 13h3"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-chevr" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></symbol>
+  <symbol id="i-min" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 16h8"/></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v2M15 2v2M9 20v2M15 20v2M2 9h2M2 15h2M20 9h2M20 15h2"/></symbol>
+  <symbol id="i-ram" viewBox="0 0 24 24"><path d="M6 19v-3M10 19v-3M14 19v-3M18 19v-3M8 11V9M16 11V9M12 11V9M2 15h20M2 7a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v1.1a2 2 0 0 0 0 3.8V15H2v-3.1a2 2 0 0 0 0-3.8Z"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6 1.65 1.65 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></symbol>
+  <symbol id="i-port" viewBox="0 0 24 24"><path d="M12 2v6M12 16v6M4 12h6M14 12h6"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></symbol>
+  <symbol id="i-term" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6"/><path d="M12 19h8"/></symbol>
+  <symbol id="i-commit" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-gitgraph" viewBox="0 0 24 24"><circle cx="5" cy="6" r="2"/><circle cx="5" cy="18" r="2"/><path d="M5 8v8"/><circle cx="19" cy="12" r="2"/><path d="M7 6h6a4 4 0 0 1 4 4v0"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></symbol>
+</svg>
+
+<div class="fig-label plain" style="font-size:12.5px;line-height:1.7;width:1120px">
+  <b style="color:var(--fg)">Git 檢視目標 —— 改成「這個 graph 跟著哪個終端機」</b>　<span style="color:var(--fg-subtle)">（畫面比例照實際截圖對過：分割時工具列是 compact 模式，只剩「分支」下拉＋搜尋＋⋯）</span><br>
+  檢視目標 ＝ 哪個工作目錄的 HEAD 給 Git 視圖看、以及 graph 上按 merge / reset 打到哪裡。現在它不存在，這個角色由全域 <code>rootPath</code> 兼任。<br>
+  前提：<b style="color:var(--fg)">你會想看的目錄，本來就有終端機開在那裡</b>。所以候選清單就是<b style="color:var(--fg)">目前開著的終端機</b> —— 不掃 worktree、不掃硬碟，而且多數情況根本不用選。
+</div>
+
+
+<!-- ============================================================ 圖 1 ============================================================ -->
+<div class="fig">
+  <div class="fig-label"><span class="n">1</span>現況 —— 右邊 <code>cd</code> 一下，左邊沒被碰到卻整個換掉</div>
+
+  <div class="window">
+    <div class="tabstrip">
+      <div class="ws"><svg class="i" width="13" height="13"><use href="#i-panel"/></svg> Workspace 1 <span class="chev"><svg class="i" width="12" height="12"><use href="#i-chevr"/></svg></span></div>
+      <div class="divider"></div>
+      <div class="tab dim"><svg class="i" width="12" height="12"><use href="#i-term"/></svg> projA <svg class="i" width="10" height="10"><use href="#i-x"/></svg></div>
+      <div class="tab active"><svg class="i" width="12" height="12"><use href="#i-branch"/></svg> Git Graph <svg class="i" width="10" height="10"><use href="#i-x"/></svg></div>
+      <div class="tab dim"><svg class="i" width="12" height="12"><use href="#i-term"/></svg> tempo-term <svg class="i" width="10" height="10"><use href="#i-x"/></svg></div>
+      <div class="tab dim"><svg class="i" width="12" height="12"><use href="#i-term"/></svg> wt-1101 <svg class="i" width="10" height="10"><use href="#i-x"/></svg></div>
+      <div class="tab dim"><svg class="i" width="12" height="12"><use href="#i-term"/></svg> worktree-1 <svg class="i" width="10" height="10"><use href="#i-x"/></svg></div>
+      <div class="right"><svg class="i" width="14" height="14"><use href="#i-search"/></svg><svg class="i" width="14" height="14"><use href="#i-panel"/></svg></div>
+    </div>
+    <div class="body"><div class="main"><div class="panes">
+
+      <div class="pane">
+        <div class="pheader">
+          <span style="color:var(--fg-subtle)">Git Graph</span>
+          <div class="spacer"></div>
+          <div class="icon-btn"><svg class="i" width="13" height="13"><use href="#i-min"/></svg></div>
+        </div>
+        <div class="gbar">
+          <span class="lab">分支:</span>
+          <div class="combo big"><span class="val">全部分支</span><span class="chev"><svg class="i" width="13" height="13"><use href="#i-chev"/></svg></span></div>
+          <div class="icon-btn"><svg class="i" width="15" height="15"><use href="#i-search"/></svg></div>
+          <div class="icon-btn"><svg class="i" width="15" height="15"><use href="#i-dots"/></svg></div>
+        </div>
+        <div class="graph">
+          <div class="crow head"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">f3d632cb</span><span class="chip cur">main</span><span class="chip rem">origin</span><span class="chip rem">origin/HEAD</span></div>
+          <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">ca5061a8</span><span class="msg">合併的 PR 641: 工作 1131 客服中心手冊</span></div>
+          <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">c678aa93</span><span class="msg">合併的 PR 614: feat(customer-portal): 匯出</span></div>
+          <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">d98e5b43</span><span class="msg">合併的 PR 610: 2【案件管理】所有案件列表</span></div>
+        </div>
+      </div>
+
+      <div class="pane focused">
+        <div class="pheader">
+          <span class="crumb"><span class="s g">D:</span><span class="g">›</span><span class="s g">code</span><span class="g">›</span><span class="s last">projB</span></span>
+          <div class="spacer"></div>
+          <div class="icon-btn"><svg class="i" width="13" height="13"><use href="#i-dots"/></svg></div>
+          <div class="icon-btn"><svg class="i" width="13" height="13"><use href="#i-min"/></svg></div>
+        </div>
+        <div class="term">
+          <div><span class="pr">PS D:\code\projA&gt;</span> cd <span class="arg">'D:\code\projB'</span></div>
+          <div><span class="pr">PS D:\code\projB&gt;</span> <span class="caret"></span></div>
+        </div>
+      </div>
+
+    </div></div></div>
+  </div>
+
+  <div class="legend"><span class="num">1</span><span class="lg-txt">左邊那張圖現在畫的是 projB 的歷史，只因為右邊的 shell 走過去了 —— <code>GitGraphTabContent.tsx:74</code> 讀全域 <code>rootPath</code>，而 <code>rootPath</code> 被作用中終端機的 cwd 推著跑。反過來也一樣：想看別的 worktree 的圖，唯一辦法是叫某個終端機去那裡，<b>於是你被拉走</b>。</span></div>
+  <div class="legend"><span class="num">2</span><span class="lg-txt">還有一個看不見的：<b>graph 上按 merge / reset，打在右邊終端機所在的工作目錄</b>。畫面上沒有一處在講這件事。</span></div>
+  <div class="legend"><span class="num">3</span><span class="lg-txt">注意工具列 —— 分割寬度下它是 <b>compact 模式</b>（<code>COMPACT_WIDTH = 620</code>，<code>GitGraphToolbar.tsx:22</code>）：只剩「分支」下拉、搜尋、⋯。<b>worktree 下拉、「顯示遠端分支」、「HEAD: 分支名」全都不在這一排</b>，而「分支」那顆自己就吃掉整排的一半以上。<b style="color:var(--fg)">這一排沒有空位可以再塞控制項。</b></span></div>
+  <div class="legend"><span class="num">4</span><span class="lg-txt">但左邊 pane 的<b>表頭幾乎是空的</b>（只有一顆收合鈕）—— <code>git-graph</code> 在 <code>HEADERLESS_KINDS</code> 裡（<code>PaneTabContent.tsx:84</code>），分割時拿到的是<b>只有關閉鈕的 PaneHeader</b>。而右邊終端機的同一條表頭已經放著它的 cwd 麵包屑。<b style="color:var(--fg)">空位在表頭，不在工具列。</b></span></div>
+</div>
+
+
+<!-- ============================================================ 圖 2 ============================================================ -->
+<div class="fig">
+  <div class="fig-label"><span class="n">2</span>建議 —— 控制項放在<b style="color:var(--fg)">左邊 pane 的表頭</b>，和右邊的麵包屑同一條線上</div>
+
+  <div class="cap"><b>(a) 剛好一個終端機（最常見）</b> —— 自動跟著它，<b>零選擇</b>。被跟著的那個 pane 表頭底線亮起來，關係兩端都看得見。</div>
+  <div class="window">
+    <div class="body"><div class="main"><div class="panes">
+
+      <div class="pane">
+        <div class="pheader">
+          <span class="bind callout"><span class="note left">跟著誰，寫在這裡</span><svg class="i" width="12" height="12"><use href="#i-link"/></svg><span class="nm">projB</span><span class="bar"></span><svg class="i" width="11" height="11"><use href="#i-branch"/></svg><span class="nm">feature/20260527-1149</span><span class="chev"><svg class="i" width="11" height="11"><use href="#i-chev"/></svg></span></span>
+          <div class="spacer"></div>
+          <div class="icon-btn"><svg class="i" width="13" height="13"><use href="#i-min"/></svg></div>
+        </div>
+        <div class="gbar">
+          <span class="lab">分支:</span>
+          <div class="combo big"><span class="val">全部分支</span><span class="chev"><svg class="i" width="13" height="13"><use href="#i-chev"/></svg></span></div>
+          <div class="icon-btn"><svg class="i" width="15" height="15"><use href="#i-search"/></svg></div>
+          <div class="icon-btn"><svg class="i" width="15" height="15"><use href="#i-dots"/></svg></div>
+        </div>
+        <div class="graph">
+          <div class="crow head"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">a097848b</span><span class="chip cur">feature/20260527-1149</span><span class="chip rem">origin</span></div>
+          <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">37610d74</span><span class="msg">chore: 排除 Design / Design_Front</span></div>
+          <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">f3d632cb</span><span class="chip">main</span><span class="chip rem">origin/HEAD</span></div>
+          <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">ca5061a8</span><span class="msg">合併的 PR 641: 工作 1131 客服中心手冊</span></div>
+        </div>
+      </div>
+
+      <div class="pane bound">
+        <div class="pheader">
+          <span class="crumb"><span class="s g">D:</span><span class="g">›</span><span class="s g">code</span><span class="g">›</span><span class="s last">projB</span></span>
+          <svg class="i" width="11" height="11" style="color:var(--accent)"><use href="#i-link"/></svg>
+          <div class="spacer"></div>
+          <div class="icon-btn"><svg class="i" width="13" height="13"><use href="#i-dots"/></svg></div>
+          <div class="icon-btn"><svg class="i" width="13" height="13"><use href="#i-min"/></svg></div>
+        </div>
+        <div class="term">
+          <div><span class="pr">PS D:\code\projB&gt;</span> git status -sb</div>
+          <div style="color:var(--fg-subtle)">## feature/20260527-1149...origin/feature/20260527-1149</div>
+          <div style="margin-top:4px"><span class="pr">PS D:\code\projB&gt;</span> <span class="caret"></span></div>
+        </div>
+      </div>
+
+    </div></div></div>
+  </div>
+
+  <div class="cap" style="margin-top:8px"><b>(b) 多個終端機</b> —— 跟著<b>樹上最近的那個</b>（同一個 split 的兄弟優先），<b>還是不問你</b>。要改再點表頭那顆。</div>
+  <div class="window">
+    <div class="body"><div class="main"><div class="panes">
+
+      <div class="pane">
+        <div class="pheader">
+          <span class="bind"><svg class="i" width="12" height="12"><use href="#i-link"/></svg><span class="nm">projB</span><span class="bar"></span><svg class="i" width="11" height="11"><use href="#i-branch"/></svg><span class="nm">feature/20260527-1149</span><span class="chev"><svg class="i" width="11" height="11"><use href="#i-chev"/></svg></span></span>
+          <div class="spacer"></div>
+          <div class="icon-btn"><svg class="i" width="13" height="13"><use href="#i-min"/></svg></div>
+        </div>
+        <div class="gbar">
+          <span class="lab">分支:</span>
+          <div class="combo big"><span class="val">全部分支</span><span class="chev"><svg class="i" width="13" height="13"><use href="#i-chev"/></svg></span></div>
+          <div class="icon-btn"><svg class="i" width="15" height="15"><use href="#i-search"/></svg></div>
+        </div>
+        <div class="graph">
+          <div class="crow head"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">a097848b</span><span class="chip cur">feature/20260527-1149</span></div>
+          <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">37610d74</span><span class="msg">chore: 排除 Design</span></div>
+          <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">f3d632cb</span><span class="chip">main</span></div>
+        </div>
+      </div>
+
+      <div class="pane bound">
+        <div class="pheader callout">
+          <span class="note up left">最近的那個</span>
+          <span class="crumb"><span class="s g">code</span><span class="g">›</span><span class="s last">projB</span></span>
+          <svg class="i" width="11" height="11" style="color:var(--accent)"><use href="#i-link"/></svg>
+          <div class="spacer"></div>
+          <div class="icon-btn"><svg class="i" width="13" height="13"><use href="#i-min"/></svg></div>
+        </div>
+        <div class="term"><div><span class="pr">PS D:\code\projB&gt;</span> npx pnpm test<span class="caret"></span></div></div>
+      </div>
+
+      <div class="pane focused">
+        <div class="pheader">
+          <span class="crumb"><span class="s g">code</span><span class="g">›</span><span class="s last">projA</span></span>
+          <div class="spacer"></div>
+          <div class="icon-btn"><svg class="i" width="13" height="13"><use href="#i-min"/></svg></div>
+        </div>
+        <div class="term"><div style="color:var(--fg-subtle)">✻ Thinking…</div><div><span class="pr">projA $</span> <span class="caret"></span></div></div>
+      </div>
+
+    </div></div></div>
+  </div>
+
+  <div class="row2" style="margin-top:8px">
+    <div class="cell">
+      <div class="cap half"><b>(c) 沒有終端機</b>（單獨開的 Git Graph 分頁，沒有分割）—— 只有這一種需要 fallback：退回<b>跟隨作用中終端機</b>。</div>
+      <div class="strip2 half" style="padding:14px 12px">
+        <div style="display:flex;align-items:center;gap:10px;color:var(--fg-subtle);font-size:12px;line-height:1.6">
+          <svg class="i" width="18" height="18" style="flex:none"><use href="#i-gitgraph"/></svg>
+          <span>這一種<b style="color:var(--fg)">連表頭都沒有</b>，而工具列反而是<b style="color:var(--fg)">寬鬆模式</b>（全寬 ≥ 620）—— 版面條件和 (a)(b) 剛好相反。<br>單獨畫一張，見<b style="color:var(--fg)">圖 3</b>。</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <div class="cap half"><b>「選定」的問題縮到多小</b></div>
+      <table class="cmp" style="width:551px">
+        <thead><tr><th style="width:180px">同分頁裡的終端機</th><th>要不要問你</th></tr></thead>
+        <tbody>
+          <tr class="pick"><td>剛好一個</td><td><span class="tagok">不問</span>　自動跟著它</td></tr>
+          <tr class="pick"><td>多個</td><td><span class="tagok">不問</span>　跟著樹上最近的</td></tr>
+          <tr><td>零個</td><td>退回跟隨作用中終端機（現況）</td></tr>
+        </tbody>
+      </table>
+      <div class="verdict ok" style="width:551px"><svg class="i" width="13" height="13"><use href="#i-check"/></svg> 分割視圖下不需要任何設定就是對的 —— 圖 1 的問題自動消失，使用者一步都不用做。</div>
+      <div class="verdict" style="width:551px"><svg class="i" width="13" height="13" style="color:var(--fg-subtle)"><use href="#i-eye"/></svg><span style="color:var(--fg-subtle)">存的是<b style="color:var(--fg)">那個 pane 的 id</b>，不是路徑：<code>{ kind:"git-graph"; followLeafId? }</code>。沒值＝自動找兄弟，舊 session 免 migration。</span></div>
+    </div>
+  </div>
+
+  <div class="legend"><span class="num">5</span><span class="lg-txt">放表頭而不是工具列的三個理由：<b>①</b> 工具列在分割寬度下已經滿了（圖 1 說明 3），表頭是空的。<b>②</b> 對面那條表頭放的正是「那個終端機在哪個目錄」，同一條線上一邊寫「我跟著誰」一邊寫「我是誰」，關係自己就講完了。<b>③</b> 表頭在<b>工具列上面</b>，而工具列裡的東西（分支篩選）都是「圖怎麼畫」；「圖畫哪裡」比它高一階，不該混在同一排。</span></div>
+  <div class="legend"><span class="num">6</span><span class="lg-txt">兄弟怎麼找：<code>computeLayout(tab.paneTree)</code> 拿到同分頁所有 pane，<code>localTerminalCwd(content, tab.cwd)</code>（<code>worktrees/lib/panes.ts</code>）拿到每個終端機在本機的目錄。那支 helper 已經處理掉兩件事：<b>SSH pane 回 <code>null</code></b>（shell 在遠端，沒有本地目錄）、<b>剛開還沒回報 cwd 的 pane 用 <code>tab.cwd</code> 兜底</b>。</span></div>
+  <div class="legend"><span class="num">7</span><span class="lg-txt"><b>要先解掉的坑</b>：只有作用中的 pane 在追 cwd（<code>cwdTracking = active &amp;&amp; isActiveTab</code>，<code>PaneTabContent.tsx:582</code>），而 graph 有焦點時，旁邊那個終端機正好不是 active pane —— 它的 <code>content.cwd</code> 會停在上次失焦時的快照。要嘛讓「被 graph 跟著的終端機」也開 cwd 追蹤，要嘛 graph reload 時直接問後端（Unix 走 <code>pty_cwd</code>，Windows 讀那個 pane 的 OSC 7 快取）。<b>被跟的 pane 被關掉</b>時退回 (c)。</span></div>
+</div>
+
+
+<!-- ============================================================ 圖 3（新） ============================================================ -->
+<div class="fig">
+  <div class="fig-label"><span class="n">3</span>單獨一個 Git Graph 分頁（沒有分割）—— <b style="color:var(--fg)">版面條件和分割時剛好相反</b></div>
+
+  <div class="cap"><b>(a) 現況</b>：沒有 pane 表頭，但工具列是<b>寬鬆模式</b>（全寬 ≥ 620），現有的控制項全都看得見 —— 包含圖 1 裡被 compact 藏起來的那些。</div>
+  <div class="window">
+    <div class="tabstrip">
+      <div class="ws"><svg class="i" width="13" height="13"><use href="#i-panel"/></svg> Workspace 1 <span class="chev"><svg class="i" width="12" height="12"><use href="#i-chevr"/></svg></span></div>
+      <div class="divider"></div>
+      <div class="tab dim"><svg class="i" width="12" height="12"><use href="#i-term"/></svg> projA <svg class="i" width="10" height="10"><use href="#i-x"/></svg></div>
+      <div class="tab active"><svg class="i" width="12" height="12"><use href="#i-branch"/></svg> Git Graph <svg class="i" width="10" height="10"><use href="#i-x"/></svg></div>
+      <div class="tab dim"><svg class="i" width="12" height="12"><use href="#i-term"/></svg> tempo-term <svg class="i" width="10" height="10"><use href="#i-x"/></svg></div>
+      <div class="right"><svg class="i" width="14" height="14"><use href="#i-search"/></svg><svg class="i" width="14" height="14"><use href="#i-panel"/></svg></div>
+    </div>
+    <div class="body"><div class="main">
+      <div class="gbar callout" style="gap:12px">
+        <span class="note left" style="top:38px">整排都在 —— 圖 1 看不到它們，是 compact 藏起來了，不是被移除</span>
+        <span class="lab">分支:</span>
+        <div class="combo" style="width:190px"><span class="val">全部分支</span><span class="chev"><svg class="i" width="13" height="13"><use href="#i-chev"/></svg></span></div>
+        <span class="lab">worktree:</span>
+        <div class="combo" style="width:230px"><span class="val">projB (feature/20260527-1149)</span><span class="chev"><svg class="i" width="13" height="13"><use href="#i-chev"/></svg></span></div>
+        <label class="checkbox"><span class="cb-box"><svg class="i" width="9" height="9"><use href="#i-check"/></svg></span> 顯示遠端分支</label>
+        <div class="spacer"></div>
+        <div class="icon-btn"><svg class="i" width="15" height="15"><use href="#i-search"/></svg></div>
+        <div class="icon-btn"><svg class="i" width="15" height="15"><use href="#i-gear"/></svg></div>
+        <div class="icon-btn"><svg class="i" width="15" height="15"><use href="#i-min"/></svg></div>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--fg-subtle);white-space:nowrap;padding-left:2px">HEAD: feature/20260527-1149</span>
+      </div>
+      <div class="graph" style="padding-bottom:8px">
+        <div class="crow head"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">a097848b</span><span class="chip cur">feature/20260527-1149</span><span class="chip rem">origin</span><span class="msg">chore: 對齊 Design 資料夾排除規則</span></div>
+        <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">37610d74</span><span class="msg">chore: 排除 Design / Design_Front 兩包產出</span></div>
+        <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">f3d632cb</span><span class="chip">main</span><span class="chip rem">origin</span><span class="chip rem">origin/HEAD</span><span class="msg">合併的 PR 641: 工作 1131 客服中心手冊</span></div>
+        <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">ca5061a8</span><span class="msg">合併的 PR 614: feat(customer-portal): 匯出報表</span></div>
+        <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">c678aa93</span><span class="msg">合併的 PR 610: 2【案件管理】所有案件列表</span></div>
+      </div>
+    </div></div>
+    <div class="sb">
+      <span class="sb-stats"><span><svg class="i" width="11" height="11"><use href="#i-cpu"/></svg> 12.3%</span><span><svg class="i" width="11" height="11"><use href="#i-ram"/></svg> 48.1%</span></span>
+      <span class="sb-right">
+        <span class="sb-item"><svg class="i" width="13" height="13"><use href="#i-foldergit"/></svg> 3</span>
+        <span class="sb-item"><svg class="i" width="13" height="13"><use href="#i-port"/></svg> 2</span>
+        <span class="sb-item"><svg class="i" width="13" height="13"><use href="#i-gear"/></svg></span>
+      </span>
+    </div>
+  </div>
+
+  <div class="cap" style="margin-top:10px"><b>(b) 提案</b>：讓 <code>git-graph</code> pane <b>一律有表頭</b>（不再只在分割時出現），控制項的位置在兩種版面下就一致了。工具列照 #329 瘦身。</div>
+  <div class="window">
+    <div class="tabstrip">
+      <div class="ws"><svg class="i" width="13" height="13"><use href="#i-panel"/></svg> Workspace 1 <span class="chev"><svg class="i" width="12" height="12"><use href="#i-chevr"/></svg></span></div>
+      <div class="divider"></div>
+      <div class="tab dim"><svg class="i" width="12" height="12"><use href="#i-term"/></svg> projA <svg class="i" width="10" height="10"><use href="#i-x"/></svg></div>
+      <div class="tab active"><svg class="i" width="12" height="12"><use href="#i-branch"/></svg> Git Graph <svg class="i" width="10" height="10"><use href="#i-x"/></svg></div>
+      <div class="tab dim"><svg class="i" width="12" height="12"><use href="#i-term"/></svg> tempo-term <svg class="i" width="10" height="10"><use href="#i-x"/></svg></div>
+      <div class="right"><svg class="i" width="14" height="14"><use href="#i-search"/></svg><svg class="i" width="14" height="14"><use href="#i-panel"/></svg></div>
+    </div>
+    <div class="body"><div class="main">
+      <div class="pheader callout">
+        <span class="note left" style="top:32px">跟分割時同一個位置</span>
+        <span class="bind"><svg class="i" width="12" height="12"><use href="#i-eye"/></svg><span class="nm">跟隨作用中終端機</span><span class="bar"></span><span class="nm">projB</span><span class="bar"></span><svg class="i" width="11" height="11"><use href="#i-branch"/></svg><span class="nm">feature/20260527-1149</span><span class="chev"><svg class="i" width="11" height="11"><use href="#i-chev"/></svg></span></span>
+        <div class="spacer"></div>
+        <div class="icon-btn"><svg class="i" width="13" height="13"><use href="#i-dots"/></svg></div>
+      </div>
+      <div class="gbar" style="gap:12px">
+        <span class="lab">分支:</span>
+        <div class="combo" style="width:190px"><span class="val">全部分支</span><span class="chev"><svg class="i" width="13" height="13"><use href="#i-chev"/></svg></span></div>
+        <div class="spacer"></div>
+        <div class="icon-btn"><svg class="i" width="15" height="15"><use href="#i-search"/></svg></div>
+        <div class="icon-btn"><svg class="i" width="15" height="15"><use href="#i-gear"/></svg></div>
+        <div class="icon-btn"><svg class="i" width="15" height="15"><use href="#i-min"/></svg></div>
+      </div>
+      <div class="graph" style="padding-bottom:8px">
+        <div class="crow head"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">a097848b</span><span class="chip cur">feature/20260527-1149</span><span class="chip rem">origin</span><span class="msg">chore: 對齊 Design 資料夾排除規則</span></div>
+        <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">37610d74</span><span class="msg">chore: 排除 Design / Design_Front 兩包產出</span></div>
+        <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">f3d632cb</span><span class="chip">main</span><span class="chip rem">origin/HEAD</span><span class="msg">合併的 PR 641: 工作 1131 客服中心手冊</span></div>
+        <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">ca5061a8</span><span class="msg">合併的 PR 614: feat(customer-portal): 匯出報表</span></div>
+        <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">c678aa93</span><span class="msg">合併的 PR 610: 2【案件管理】所有案件列表</span></div>
+      </div>
+    </div></div>
+    <div class="sb">
+      <span class="sb-stats"><span><svg class="i" width="11" height="11"><use href="#i-cpu"/></svg> 12.3%</span><span><svg class="i" width="11" height="11"><use href="#i-ram"/></svg> 48.1%</span></span>
+      <span class="sb-right">
+        <span class="echo ctl"><svg class="i" width="12" height="12"><use href="#i-eye"/></svg><span class="nm">projB</span><span class="bar"></span><svg class="i" width="11" height="11"><use href="#i-branch"/></svg><span class="nm">feature/20260527-1149</span></span>
+        <span class="sb-item"><svg class="i" width="13" height="13"><use href="#i-foldergit"/></svg> 3</span>
+        <span class="sb-item"><svg class="i" width="13" height="13"><use href="#i-port"/></svg> 2</span>
+        <span class="sb-item"><svg class="i" width="13" height="13"><use href="#i-gear"/></svg></span>
+      </span>
+    </div>
+  </div>
+
+  <div class="legend"><span class="num">8</span><span class="lg-txt">全寬時「跟隨」是<b>正確的預設</b>，不是退而求其次：這種分頁沒有兄弟終端機，而你開它就是要看「我現在在的地方」。所以那顆用眼睛圖示、灰框，顯示<b>跟隨</b>＋現在跟到哪（projB ＋ 分支）。要釘住再點它。</span></div>
+  <div class="legend"><span class="num">9</span><span class="lg-txt"><b>那條「只在分割時給表頭」的規則可以放寬</b>，因為它的理由正好被這個功能消掉了 —— <code>PaneTabContent.tsx:80</code>-<code>83</code> 寫的是「<i>only while the tab is split — a single pane would show an empty strip</i>」。一有內容要放，「空列」就不成立了。</span></div>
+  <div class="legend"><span class="num">10</span><span class="lg-txt">為什麼不「全寬放工具列、分割放表頭」：控制項的位置會<b>隨著你有沒有分割而跳</b>，那是最糟的一種。也不要「只放狀態列」—— 分割時離視線太遠，按 merge 之前看不到落點，而且 #329 的工具列瘦身就白做了（那排空出來的位子沒有換到任何東西）。</span></div>
+  <div class="legend"><span class="num">11</span><span class="lg-txt">順帶：工具列瘦身後 <b>worktree 下拉與「HEAD: 分支名」都退場</b>，「顯示遠端分支」照 #329 的 B 案收進 ⚙ —— 那一排只留「圖怎麼畫」，寬鬆模式和 compact 模式的差別就只剩幾顆圖示收不收進 ⋯，不再有「有些控制項在某個寬度下整個消失」這件事。</span></div>
+</div>
+
+
+<!-- ============================================================ 圖 4 ============================================================ -->
+<div class="fig">
+  <div class="fig-label"><span class="n">4</span>真的要選的時候 —— 清單就是<b style="color:var(--fg)">目前開著的終端機</b>，沒有別的</div>
+
+  <div class="row2">
+    <div class="cell">
+      <div class="cap free">點表頭那顆展開</div>
+      <div class="menu">
+        <div class="pk-search"><svg class="i" width="12" height="12"><use href="#i-search"/></svg><span>找終端機</span><span class="caret2"></span></div>
+        <div class="mhead">這個分頁</div>
+        <div class="mi on mono"><span class="tick"><svg class="i" width="11" height="11"><use href="#i-check"/></svg></span><span class="lbl">pwsh — projB</span><span class="hint">feature/20260527-1149</span></div>
+        <div class="mi mono"><span class="tick"></span><span class="lbl">claude — projA</span><span class="hint">feature/20260904-1101</span></div>
+        <div class="sep"></div>
+        <div class="mhead">其他分頁</div>
+        <div class="mi mono"><span class="tick"></span><span class="lbl">pwsh — tempo-term</span><span class="hint">feat/all-changes-panel-link</span></div>
+        <div class="mi mono"><span class="tick"></span><span class="lbl">pwsh — wt-1101</span><span class="hint">feature/20260904-1101</span></div>
+        <div class="mi mono"><span class="tick"></span><span class="lbl">codex — worktree-1</span><span class="hint">master</span></div>
+        <div class="mi dis mono"><span class="tick"><svg class="i" width="11" height="11"><use href="#i-globe"/></svg></span><span class="lbl">ssh — build-01</span><span class="hint">遠端，沒有本地目錄</span></div>
+        <div class="sep"></div>
+        <div class="mi off"><span class="tick"><svg class="i" width="11" height="11"><use href="#i-eye"/></svg></span><span class="lbl">跟隨作用中終端機</span><span class="hint">目前 projA</span></div>
+        <div class="pk-foot">只列<b style="color:var(--fg)">開著的終端機</b>。想看沒開終端機的地方 —— 先在那裡開一個（worktree 管理器的「開啟」一鍵），它就出現在這份清單裡。</div>
+      </div>
+    </div>
+
+    <div class="cell">
+      <div class="cap free">切換之後，只有這一個 pane 換掉</div>
+      <div class="strip2 half" style="padding:10px">
+        <div style="display:flex;flex-direction:column;gap:7px;font-size:12px;color:var(--fg-muted)">
+          <div style="display:flex;align-items:center;gap:8px"><svg class="i" width="13" height="13" style="color:var(--accent)"><use href="#i-gitgraph"/></svg> 這個 Git Graph pane<span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--accent)">→ projA</span></div>
+          <div class="sep" style="margin:2px 0"></div>
+          <div style="display:flex;align-items:center;gap:8px;color:var(--fg-subtle)"><svg class="i" width="13" height="13"><use href="#i-gitgraph"/></svg> 別的 Git Graph pane<span style="margin-left:auto;font-family:var(--mono);font-size:11px">不動</span></div>
+          <div style="display:flex;align-items:center;gap:8px;color:var(--fg-subtle)"><svg class="i" width="13" height="13"><use href="#i-term"/></svg> 任何終端機<span style="margin-left:auto;font-family:var(--mono);font-size:11px">不動，不會被打 cd</span></div>
+          <div style="display:flex;align-items:center;gap:8px;color:var(--fg-subtle)"><svg class="i" width="13" height="13"><use href="#i-folder"/></svg> 檔案總管樹根<span style="margin-left:auto;font-family:var(--mono);font-size:11px">不動</span></div>
+          <div style="display:flex;align-items:center;gap:8px;color:var(--fg-subtle)"><svg class="i" width="13" height="13"><use href="#i-term"/></svg> 新開終端機開在哪<span style="margin-left:auto;font-family:var(--mono);font-size:11px">不動</span></div>
+          <div style="display:flex;align-items:center;gap:8px;color:var(--fg-subtle)"><svg class="i" width="13" height="13"><use href="#i-clip"/></svg> 分頁標題<span style="margin-left:auto;font-family:var(--mono);font-size:11px">不動</span></div>
+        </div>
+      </div>
+      <div class="verdict ok" style="width:551px"><svg class="i" width="13" height="13"><use href="#i-check"/></svg> 下半部那四條就是為什麼不能只「不 cd、把 <code>rootPath</code> 設過去」—— 那個變數還兼任樹根、新終端機位置、分頁標題，設它＝那四件事一起被改錯。</div>
+    </div>
+  </div>
+
+  <div class="legend"><span class="num">12</span><span class="lg-txt">清單不用掃硬碟、不用跑 <code>git worktree list</code>、不用額外的持久化 —— <b>它就是分頁樹本身</b>。SSH 那一列反灰而不是隱藏，因為「為什麼我的 ssh 分頁不在裡面」比一列灰字更難懂。</span></div>
+  <div class="legend"><span class="num">13</span><span class="lg-txt">代價講清楚：<b>沒開終端機的 worktree／專案看不到</b>。但在這個 app 裡「開一個終端機到那個目錄」本來就是一鍵動作，所以那不是繞路，那就是動作本身。</span></div>
+  <div class="legend"><span class="num">14</span><span class="lg-txt">連帶結論：這顆<b>不再和 worktree 管理器重複</b> —— #329 主張移除現有 worktree 下拉的理由（「功能與管理器的『開啟』重複」）在這個語意下不成立。管理器管建立／刪除／開終端機，這顆管「這個 pane 在看哪一個終端機」。</span></div>
+</div>
+
+
+<!-- ============================================================ 圖 5 ============================================================ -->
+<div class="fig">
+  <div class="fig-label"><span class="n">5</span>一頁兩組，各自跟著自己的終端機 —— 這是「全視窗一顆」永遠做不到的事</div>
+
+  <div class="window">
+    <div class="tabstrip">
+      <div class="ws"><svg class="i" width="13" height="13"><use href="#i-panel"/></svg> Workspace 1 <span class="chev"><svg class="i" width="12" height="12"><use href="#i-chevr"/></svg></span></div>
+      <div class="divider"></div>
+      <div class="tab active"><svg class="i" width="12" height="12"><use href="#i-branch"/></svg> 對照 <svg class="i" width="10" height="10"><use href="#i-x"/></svg></div>
+      <div class="tab dim"><svg class="i" width="12" height="12"><use href="#i-term"/></svg> tempo-term <svg class="i" width="10" height="10"><use href="#i-x"/></svg></div>
+      <div class="right"><svg class="i" width="14" height="14"><use href="#i-search"/></svg><svg class="i" width="14" height="14"><use href="#i-panel"/></svg></div>
+    </div>
+    <div class="body"><div class="main"><div class="panes">
+
+      <div class="pane">
+        <div class="pheader">
+          <span class="bind" style="max-width:100%"><svg class="i" width="11" height="11"><use href="#i-link"/></svg><span class="nm">projB</span><span class="chev"><svg class="i" width="10" height="10"><use href="#i-chev"/></svg></span></span>
+          <div class="spacer"></div>
+          <div class="icon-btn"><svg class="i" width="12" height="12"><use href="#i-min"/></svg></div>
+        </div>
+        <div class="gbar" style="gap:6px;padding:0 8px">
+          <div class="combo big" style="height:26px"><span class="val">全部分支</span><span class="chev"><svg class="i" width="12" height="12"><use href="#i-chev"/></svg></span></div>
+          <div class="icon-btn"><svg class="i" width="13" height="13"><use href="#i-dots"/></svg></div>
+        </div>
+        <div class="graph">
+          <div class="crow head"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">a097848b</span><span class="chip cur">…527-1149</span></div>
+          <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">37610d74</span><span class="msg">chore: 排除 Design</span></div>
+          <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">f3d632cb</span><span class="chip">main</span></div>
+        </div>
+      </div>
+
+      <div class="pane bound">
+        <div class="pheader">
+          <span class="crumb"><span class="s last">projB</span></span>
+          <svg class="i" width="11" height="11" style="color:var(--accent)"><use href="#i-link"/></svg>
+          <div class="spacer"></div>
+          <div class="icon-btn"><svg class="i" width="12" height="12"><use href="#i-min"/></svg></div>
+        </div>
+        <div class="term" style="font-size:11px"><div><span class="pr">projB&gt;</span> pnpm test</div><div style="color:var(--ok)">✓ 14 passed</div></div>
+      </div>
+
+      <div class="pane">
+        <div class="pheader">
+          <span class="bind callout" style="max-width:100%"><span class="note left">另一個專案</span><svg class="i" width="11" height="11"><use href="#i-link"/></svg><span class="nm">projA</span><span class="chev"><svg class="i" width="10" height="10"><use href="#i-chev"/></svg></span></span>
+          <div class="spacer"></div>
+          <div class="icon-btn"><svg class="i" width="12" height="12"><use href="#i-min"/></svg></div>
+        </div>
+        <div class="gbar" style="gap:6px;padding:0 8px">
+          <div class="combo big" style="height:26px"><span class="val">全部分支</span><span class="chev"><svg class="i" width="12" height="12"><use href="#i-chev"/></svg></span></div>
+          <div class="icon-btn"><svg class="i" width="13" height="13"><use href="#i-dots"/></svg></div>
+        </div>
+        <div class="graph" style="padding-top:34px">
+          <div class="crow head"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">8f31ac09</span><span class="chip cur">…904-1101</span></div>
+          <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">d40b7e51</span><span class="msg">合併的 PR 641</span></div>
+          <div class="crow"><span class="lane"><svg class="i" width="9" height="9" style="fill:currentColor;stroke:none"><use href="#i-commit"/></svg></span><span class="sha">1c9e88bd</span><span class="chip">main</span></div>
+        </div>
+      </div>
+
+      <div class="pane bound focused">
+        <div class="pheader">
+          <span class="crumb"><span class="s last">projA</span></span>
+          <svg class="i" width="11" height="11" style="color:var(--accent)"><use href="#i-link"/></svg>
+          <div class="spacer"></div>
+          <div class="icon-btn"><svg class="i" width="12" height="12"><use href="#i-min"/></svg></div>
+        </div>
+        <div class="term" style="font-size:11px"><div style="color:var(--fg-subtle)">✻ Thinking…</div><div><span class="pr">projA $</span> <span class="caret"></span></div></div>
+      </div>
+
+    </div></div></div>
+
+    <div class="sb">
+      <span class="sb-stats"><span><svg class="i" width="11" height="11"><use href="#i-cpu"/></svg> 12.3%</span><span><svg class="i" width="11" height="11"><use href="#i-ram"/></svg> 48.1%</span></span>
+      <span class="sb-right">
+        <span class="echo ctl pinned callout"><span class="note up left">作用中 pane 的目標</span><svg class="i" width="12" height="12"><use href="#i-link"/></svg><span class="nm">projA</span><span class="bar"></span><svg class="i" width="11" height="11"><use href="#i-branch"/></svg><span class="nm">feature/20260904-1101</span></span>
+        <span class="sb-item"><svg class="i" width="13" height="13"><use href="#i-foldergit"/></svg> 3</span>
+        <span class="sb-item"><svg class="i" width="13" height="13"><use href="#i-port"/></svg> 2</span>
+        <span class="sb-item"><svg class="i" width="13" height="13"><use href="#i-gear"/></svg></span>
+      </span>
+    </div>
+  </div>
+
+  <div class="legend"><span class="num">15</span><span class="lg-txt">四個 pane 兩組配對。pane 一窄，表頭那顆自己收成只剩目標名（分支名讓給狀態列那顆），這是<b>固定寬度＋截斷</b>該有的行為 —— 而在工具列裡它連這個寬度都拿不到。</span></div>
+  <div class="legend"><span class="num">16</span><span class="lg-txt">這也是「全視窗一顆」永遠做不到的事，所以<b>粒度必須是 pane</b>。這在這個 app 裡本來就有前例 —— <code>editor</code> pane 記 <code>path</code>、<code>note</code> 記 <code>noteId</code>、<code>diff</code> 記 <code>path + staged</code>（<code>terminalLayout.ts:37</code>-<code>44</code>）；<code>git-graph</code> 和 <code>all-changes</code> 是唯二什麼都不記的。</span></div>
+</div>
+
+
+<!-- ============================================================ 圖 6 ============================================================ -->
+<div class="fig">
+  <div class="fig-label"><span class="n">6</span>狀態列那顆 —— 長什麼樣，以及它要不要能按</div>
+
+  <div class="row2">
+    <div class="cell">
+      <div class="cap free"><b>跟隨</b>（這個 pane 沒指定，或作用中的就是終端機）</div>
+      <div class="strip2 half"><div class="sb" style="border-top:none;border-radius:8px">
+        <span class="sb-stats"><span><svg class="i" width="11" height="11"><use href="#i-cpu"/></svg> 12.3%</span><span><svg class="i" width="11" height="11"><use href="#i-ram"/></svg> 48.1%</span></span>
+        <span class="sb-right">
+          <span class="echo ctl"><svg class="i" width="12" height="12"><use href="#i-eye"/></svg><span class="nm">projA</span><span class="bar"></span><svg class="i" width="11" height="11"><use href="#i-branch"/></svg><span class="nm">feature/20260904-1101</span></span>
+          <span class="sb-item"><svg class="i" width="13" height="13"><use href="#i-foldergit"/></svg> 3</span>
+          <span class="sb-item"><svg class="i" width="13" height="13"><use href="#i-gear"/></svg></span>
+        </span>
+      </div></div>
+
+      <div class="cap free" style="margin-top:10px"><b>跟著指定的終端機</b> —— 圖示換成鏈結，整顆轉成 accent 色</div>
+      <div class="strip2 half"><div class="sb" style="border-top:none;border-radius:8px">
+        <span class="sb-stats"><span><svg class="i" width="11" height="11"><use href="#i-cpu"/></svg> 12.3%</span><span><svg class="i" width="11" height="11"><use href="#i-ram"/></svg> 48.1%</span></span>
+        <span class="sb-right">
+          <span class="echo ctl pinned callout"><span class="note up left">一眼分得出兩種狀態</span><svg class="i" width="12" height="12"><use href="#i-link"/></svg><span class="nm">projB</span><span class="bar"></span><svg class="i" width="11" height="11"><use href="#i-branch"/></svg><span class="nm">feature/20260527-1149</span></span>
+          <span class="sb-item"><svg class="i" width="13" height="13"><use href="#i-foldergit"/></svg> 3</span>
+          <span class="sb-item"><svg class="i" width="13" height="13"><use href="#i-gear"/></svg></span>
+        </span>
+      </div></div>
+
+      <div class="verdict" style="width:551px;margin-top:4px"><svg class="i" width="13" height="13" style="color:var(--fg-subtle)"><use href="#i-eye"/></svg><span style="color:var(--fg-subtle)">兩段名字都要：<b style="color:var(--fg)">目標名</b>是落點（按 merge 打在哪），<b style="color:var(--fg)">分支名</b>是 #329 真正想常駐的東西。只留一段就少一半資訊。</span></div>
+    </div>
+
+    <div class="cell">
+      <div class="cap free">點開 —— 往上開，跟表頭那顆<b>同一份清單</b></div>
+      <div class="menu" style="width:300px">
+        <div class="mhead">作用中 pane 跟著</div>
+        <div class="mi on mono"><span class="tick"><svg class="i" width="11" height="11"><use href="#i-check"/></svg></span><span class="lbl">pwsh — projB</span><span class="hint">這個分頁</span></div>
+        <div class="mi mono"><span class="tick"></span><span class="lbl">claude — projA</span><span class="hint">這個分頁</span></div>
+        <div class="mi mono"><span class="tick"></span><span class="lbl">pwsh — tempo-term</span><span class="hint">其他分頁</span></div>
+        <div class="sep"></div>
+        <div class="mi off"><span class="tick"><svg class="i" width="11" height="11"><use href="#i-eye"/></svg></span><span class="lbl">跟隨作用中終端機</span></div>
+        <div class="pk-foot">作用中的 pane <b style="color:var(--fg)">是</b> Git 視圖時才可按。作用中是終端機時沒有 pane 可改 —— 那時它是純顯示（灰框拿掉）。</div>
+      </div>
+      <div class="verdict ok" style="width:330px"><svg class="i" width="13" height="13"><use href="#i-check"/></svg> 這顆是<b>單 leaf 的 Git Graph 分頁</b>（圖 3）唯一的入口 —— 那種分頁連表頭都沒有。</div>
+    </div>
+  </div>
+
+  <div class="legend"><span class="num">17</span><span class="lg-txt"><b>可以按，這不衝突。</b>我先前說「兩個地方能改同一個值會混亂」講得太重 —— 只要狀態列那顆明確代表<b>作用中 pane 的目標</b>，它和表頭那顆改的就是<b>同一個值</b>，一個近一個遠，不是兩個真相。</span></div>
+  <div class="legend"><span class="num">18</span><span class="lg-txt">真正的分界：<b>粒度還是 pane</b>，狀態列只是「作用中那個 pane」的遠端遙控。作用中的 pane 是終端機時它沒有東西可改，退成純顯示 —— 這條不寫清楚，就會有人以為它改的是「整個視窗」，然後又回到圖 5 說明 16 的問題。</span></div>
+</div>
+
+
+<!-- ============================================================ 表 ============================================================ -->
+<div class="fig">
+  <div class="fig-label plain">落點取捨（照實際版面修正後）</div>
+  <table class="cmp">
+    <thead><tr><th style="width:190px">放在哪</th><th style="width:88px">角色</th><th>理由</th></tr></thead>
+    <tbody>
+      <tr class="pick"><td><b>Git Graph pane 的表頭</b></td><td class="v ok">主入口</td><td>分割時它是空的（只有收合鈕），而對面終端機的同一條表頭已經放著 cwd 麵包屑 —— 一邊「我跟著誰」、一邊「我是誰」，關係自己講完。而且它在工具列<b>上面</b>一階：工具列管「圖怎麼畫」，這裡管「圖畫哪裡」。</td></tr>
+      <tr class="pick"><td><b>狀態列</b></td><td class="v ok">常駐入口<br>＋顯示</td><td>顯示作用中 pane 的目標（<span style="white-space:nowrap">眼睛／鏈結 ＋ 目標名 ＋ 分支名</span>），兼任 #329 的常駐分支指示器。<b>單 leaf 的 Git Graph 分頁只有這一個入口</b>（那種分頁沒有表頭）。作用中是終端機時退成純顯示。</td></tr>
+      <tr><td><b>終端機 pane 表頭</b></td><td class="v ok">被跟的記號</td><td>關係的另一端。底線亮起來＋一個 <svg class="i" width="11" height="11" style="vertical-align:-1px"><use href="#i-link"/></svg> 就夠，不需要控制項 —— 那條列已經有麵包屑和 ⋯ 選單了。</td></tr>
+      <tr><td><b>Git Graph 工具列</b><br><span style="font-size:11px">（現有 worktree 下拉的位置）</span></td><td class="v no">退場</td><td><b>分割寬度下這一排沒有空位</b>：compact 模式只剩「分支」下拉＋搜尋＋⋯，而「分支」那顆自己就佔掉一半以上。現有的 worktree 下拉本來也在那個寬度下就不顯示。#329 要把這一排瘦身，再往裡面塞東西是反方向。</td></tr>
+      <tr><td><b>分頁列工作區膠囊旁</b></td><td class="v no">不放</td><td>視窗層級撐不住一頁多版面（圖 5）；又緊貼 explorer 樹根，會被讀成換樹根。</td></tr>
+      <tr><td><b>側欄分支行</b></td><td class="v no">回音</td><td>側欄可收起 → 收起就看不到，正是 #329 抱怨現況的那句話。放回音可以，放開關不行。</td></tr>
+    </tbody>
+  </table>
+
+  <div class="legend"><span class="num">19</span><span class="lg-txt">要動的檔（行號對 <code>feat/all-changes-panel-link</code> 的工作樹）：<code>terminalLayout.ts:41</code> 加 <code>followLeafId?</code>；<code>tabsStore.ts</code> 加一個 setter（比照 <code>:201</code> 的 <code>setTerminalCwd</code>）；<code>PaneTabContent.tsx:500</code> 那條 <code>HEADERLESS_KINDS</code> 的 <code>&lt;PaneHeader showClose /&gt;</code> 要能吃 <code>left</code>（<code>PaneHeader</code> 本來就有這個 prop，<code>TerminalPaneHeader</code> 在用）；<code>GitGraphTabContent.tsx:74</code>-<code>181</code> 改成「跟著的終端機優先」；<code>GitGraphToolbar.tsx:268</code> 的 worktree 下拉<b>整個移除</b>（功能移到表頭）；<code>AllChangesTabContent.tsx:103</code>-<code>181</code> 共用同一個 hook。</span></div>
+  <div class="legend"><span class="num">20</span><span class="lg-txt"><b>順帶查到一件已經做完的事</b>：「把已開啟的終端機切到別的目錄」<b>已經在了</b> —— 終端機表頭的麵包屑點一段就列出該層的兄弟目錄，選一個就 <code>writeToTerminal(leafId, "cd …\r")</code>（<code>TerminalPaneHeader.tsx</code>）。它的註解還引了一條 ADR：<i>the menu switches the pane, never opens a tab</i>。所以那件事不用另開 issue。</span></div>
+  <div class="legend"><span class="num">21</span><span class="lg-txt">另一件查證：<b>graph 旁邊放終端機做得到</b> —— <code>splitActivePane</code>（<code>tabsStore.ts:1081</code>）只看 <code>MAX_PANES</code>、不看 tab 種類，新 pane 放 launcher，而 launcher 清單裡有「終端機」（<code>LauncherPanel.tsx:174</code>）。順帶：<code>App.tsx:627</code> 那句註解寫「no-op off a terminal tab」，和程式碼不符。</span></div>
+</div>
+
+</body></html>

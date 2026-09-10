@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<title>tempo-term - Git Graph 未提交變更節點 mockups</title>
+<style>
+  :root {
+    --bg: #222222;
+    --bg-elevated: #292929;
+    --bg-inset: #222222;
+    --border: #333333;
+    --border-strong: #454545;
+    --fg: #dbd7ca;
+    --fg-muted: #bfbaaa;
+    --fg-subtle: #85827b;
+    --accent: #5eaab5;
+    --success: #4d9375;
+    --st-m: #e8c139;
+    --st-a: #46a758;
+    --st-d: #e0555f;
+    --st-q: #85827b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+  ::selection { background: transparent; }
+  body {
+    background: #181818;
+    color: var(--fg);
+    font-family: "Segoe UI", "Noto Sans TC", sans-serif;
+    font-size: 13px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    align-items: flex-start;
+  }
+  svg.i { flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .figure { background: #181818; padding: 16px; }
+  .fig-label {
+    display: inline-block;
+    font-size: 11px;
+    color: var(--fg-subtle);
+    border: 1px solid var(--border-strong);
+    border-radius: 4px;
+    padding: 2px 8px;
+    margin-bottom: 8px;
+    font-family: Consolas, monospace;
+  }
+  .fig-label.after { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+  h1 { font-size: 15px; font-weight: 600; color: var(--fg); margin-bottom: 6px; }
+  .lede { font-size: 12px; color: var(--fg-subtle); max-width: 960px; line-height: 1.8; }
+
+  /* ============ graph pane ============ */
+  .graph {
+    width: 960px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    position: relative;
+    overflow: hidden;
+  }
+  .lanes { position: absolute; left: 0; top: 0; width: 124px; height: 100%; }
+  .lanes svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .node {
+    position: absolute; z-index: 10;
+    width: 12px; height: 12px; border-radius: 999px;
+    border: 2px solid var(--bg);
+    transform: translate(-50%, -50%);
+  }
+  /* HEAD 節點:實心 accent + 光暈(現況既有樣式) */
+  .node.head { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent); }
+  /* 未提交節點:空心 + 虛線描邊,和任何 commit 都不像 */
+  .node.wt {
+    background: var(--bg);
+    border: 2px dashed var(--accent);
+    width: 14px; height: 14px;
+  }
+  .node.wt.selected { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 30%, transparent); }
+  /* 工作區乾淨:同一顆節點,描邊轉灰、整列淡下去 —— 位置不動,但不吸引目光 */
+  .node.wt.quiet { border-color: color-mix(in srgb, var(--fg-subtle) 55%, transparent); }
+  .row.quiet .msg { color: var(--fg-subtle); }
+  .row.quiet .hash.none { opacity: .3; }
+
+  .row {
+    position: absolute; left: 0; right: 16px; height: 36px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding-left: 112px; padding-right: 12px;
+    border: 1px solid transparent; border-radius: 4px;
+    transform: translateY(-50%);
+  }
+  .row.selected { border-color: var(--border-strong); background: color-mix(in srgb, var(--bg-elevated) 60%, transparent); }
+  .row .left { display: flex; align-items: center; gap: 12px; overflow: hidden; padding-right: 8px; min-width: 0; }
+  .row .hash { font-family: Consolas, monospace; font-size: 12px; font-weight: 600; color: var(--accent); flex: none; }
+  .row .hash.none { color: var(--fg-subtle); opacity: .45; letter-spacing: 1px; }
+  .row .msg { font-size: 13px; color: var(--fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row.dim .msg { color: var(--fg-muted); }
+  .row .right { display: flex; align-items: center; gap: 16px; flex: none; font-family: Consolas, monospace; font-size: 12px; color: var(--fg-subtle); }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: Consolas, monospace; font-size: 11px;
+    border-radius: 4px; padding: 1px 6px;
+    border: 1px solid var(--border-strong); color: var(--fg-muted);
+    white-space: nowrap; flex: none;
+  }
+  /* 目前分支的 chip:kind="head",綠色 + 打勾;chip 上只有分支名,沒有 "HEAD →" */
+  .chip.head {
+    border-color: color-mix(in srgb, var(--success) 40%, transparent);
+    background: color-mix(in srgb, var(--success) 15%, transparent);
+    color: var(--success);
+  }
+  /* 遠端 ref:灰底灰字 */
+  .chip.remote { border-color: var(--border-strong); background: var(--bg-inset); color: var(--fg-subtle); }
+  .chip.wt { border-style: dashed; border-color: color-mix(in srgb, var(--accent) 55%, transparent); color: var(--accent); }
+
+  /* 計數:緊接在訊息後面,不是丟到最右邊。
+     不上色 —— 綠/黃在這個 app 已經是檔案狀態字母(A/M)的語意,
+     拿來標暫存與否是重複用色,而且會讓最安靜的一列變成最吵的一列。
+     連深淺也統一:整段就是這一列的文字色 --fg,只用 mono + 小一號字級
+     和訊息拉開層次,不再靠第二種灰。 */
+  .counts { display: inline-flex; align-items: center; gap: 8px; font-family: Consolas, monospace; font-size: 11px; flex: none; color: var(--fg); }
+  .counts b { font-weight: 600; }
+  .counts .dot { opacity: .5; }
+
+  .callout { position: relative; }
+  .callout .note {
+    position: absolute; top: -26px; left: 112px;
+    background: var(--accent); color: #10282c; font-size: 11px; font-weight: 600;
+    border-radius: 4px; padding: 2px 8px; white-space: nowrap; z-index: 30;
+  }
+  .callout .note::after {
+    content: ""; position: absolute; top: 100%; left: 14px;
+    border: 4px solid transparent; border-top-color: var(--accent);
+  }
+  .empty-right { font-size: 11px; font-family: Consolas, monospace; color: var(--fg-subtle); opacity: .35; }
+  .miss { color: #e5534b; font-size: 11px; font-family: Consolas, monospace; margin-top: 8px; }
+
+  /* ============ bottom details panel ============ */
+  .stack { width: 960px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--bg); display: flex; flex-direction: column; }
+  .stack .graph { width: auto; border: none; border-radius: 0; }
+  .resizer { height: 4px; background: var(--border); flex: none; position: relative; }
+  .resizer::after { content: ""; position: absolute; left: 50%; top: 1px; width: 28px; height: 2px; border-radius: 2px; background: var(--border-strong); transform: translateX(-50%); }
+
+  .panel { height: 306px; display: flex; flex-direction: column; background: var(--bg); }
+  .p-head {
+    height: 30px; flex: none; display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border); background: var(--bg-inset); padding: 0 12px;
+  }
+  .p-head .id { display: flex; align-items: center; gap: 8px; }
+  .p-head .x { color: var(--fg-subtle); display: flex; }
+  .p-body { flex: 1; display: flex; min-height: 0; }
+  .p-left { width: 340px; flex: none; border-right: 1px solid var(--border); padding: 8px 12px; overflow: hidden; }
+  .p-right { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .files-head { display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 500; color: var(--fg-subtle); margin-bottom: 4px; }
+  .d-group { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--fg-subtle); margin: 8px 0 3px; display: flex; align-items: center; gap: 6px; }
+  .d-group:first-of-type { margin-top: 2px; }
+  .d-group .n { font-family: Consolas, monospace; opacity: .8; }
+  .file-row { display: flex; align-items: center; gap: 8px; padding: 2px 6px; font-size: 13px; color: var(--fg-muted); font-family: Consolas, monospace; border-radius: 4px; }
+  .file-row.on { background: var(--bg-elevated); color: var(--fg); }
+  .file-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .st { width: 12px; text-align: center; font-weight: 600; flex: none; }
+  .st-m { color: var(--st-m); } .st-a { color: var(--st-a); } .st-d { color: var(--st-d); } .st-q { color: var(--st-q); }
+  .tabs { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid var(--border); background: var(--bg-inset); padding: 4px 8px; flex: none; }
+  .tab { border-radius: 4px; padding: 1px 8px; font-size: 13px; color: var(--fg-subtle); }
+  .tab.on { background: var(--bg-elevated); color: var(--fg); }
+  .diff { flex: 1; overflow: hidden; font-family: Consolas, monospace; font-size: 12px; padding: 6px 0; }
+  .dl { padding: 0 12px; white-space: pre; color: var(--fg-muted); }
+  .dl.meta { color: var(--fg-subtle); opacity: .8; }
+  .dl.hunk { color: var(--accent); }
+  .dl.add { color: #9fd8ab; background: color-mix(in srgb, #46a758 14%, transparent); }
+  .dl.del { color: #f0a5aa; background: color-mix(in srgb, #e0555f 14%, transparent); }
+
+  /* ============ zoom spec ============ */
+  .spec-card { width: 960px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 18px; display: flex; gap: 28px; align-items: center; }
+  .spec-note { font-size: 12px; color: var(--fg-muted); line-height: 2; }
+  .spec-note code { font-family: Consolas, monospace; color: var(--fg); font-size: 11px; }
+
+  /* ============ 文字寫法比較 ============ */
+  .variants { width: 960px; display: flex; flex-direction: column; gap: 10px; }
+  .variant { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); position: relative; height: 44px; }
+  .variant .tag { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 11px; font-family: Consolas, monospace; color: var(--fg-subtle); }
+  .variant .tag.pick { color: var(--accent); }
+  .variant .row { top: 22px; right: 120px; }
+
+  /* ============ context menu ============ */
+  .menu {
+    width: 240px; border: 1px solid var(--border-strong); border-radius: 6px;
+    background: var(--bg-elevated); padding: 4px; font-size: 12px; color: var(--fg-muted);
+  }
+  .menu .mi { padding: 5px 10px; border-radius: 4px; display: flex; align-items: center; gap: 8px; }
+  .menu .mi.hot { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--fg); }
+  .menu .sep { height: 1px; background: var(--border); margin: 4px 6px; }
+
+  /* ============ settings ============ */
+  .settings { width: 620px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-inset); padding: 18px; }
+  .s-title { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-subtle); margin-bottom: 16px; }
+  .s-label { font-size: 13px; font-weight: 500; color: var(--fg); margin-bottom: 2px; }
+  .s-desc { font-size: 11px; color: var(--fg-muted); margin-bottom: 10px; }
+  .s-check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--fg); margin-bottom: 2px; }
+  .s-hint { font-size: 11px; color: var(--fg-muted); margin-left: 23px; margin-bottom: 12px; }
+  .cb { width: 15px; height: 15px; border-radius: 4px; border: 1px solid var(--fg-subtle); flex: none; display: flex; align-items: center; justify-content: center; }
+  .cb.on { background: var(--accent); border-color: var(--accent); color: #10282c; }
+  .s-sep { height: 1px; background: var(--border); margin: 16px 0; }
+  .s-new { outline: 1px dashed var(--accent); outline-offset: 8px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div class="figure">
+  <h1>Git Graph:最上面加一列「未提交的變更」</h1>
+  <p class="lede">
+    工作區有東西沒 commit 的時候,Git Graph 從頭到尾看不出來 —— 圖上最新的一列永遠是 HEAD。
+    要知道自己手上改了什麼,得離開這個分頁、切回原始碼控制側欄。<br>
+    提案:在圖最上方<b>常駐</b>一列代表工作區的節點,用虛線接到 HEAD;
+    點它,<b>下方</b>的詳情面板就改列未提交的檔案。工作區乾淨時這一列不消失,只是變安靜 —— 位置不動,版面就不會在每次提交時跳。
+    方向參考 mhutchie/vscode-git-graph 的 Uncommitted Changes。
+  </p>
+</div>
+
+<!-- ============ 圖 1: 現況 ============ -->
+<div class="figure">
+  <div class="fig-label">現況 — 圖的第一列就是 HEAD;工作區改了 7 個檔,圖上沒有任何痕跡</div>
+  <div class="graph" style="height:184px">
+    <div class="lanes">
+      <svg viewBox="0 0 124 184" preserveAspectRatio="none">
+        <path d="M16,20 L16,164" stroke="#e0555f" stroke-width="2" fill="none" opacity=".8"/>
+        <path d="M16,92 C16,110 30,110 30,128 L30,164" stroke="#e3712f" stroke-width="2" fill="none" opacity=".8"/>
+      </svg>
+      <div class="node head" style="left:16px; top:20px"></div>
+      <div class="node" style="left:16px; top:56px; background:#e0555f"></div>
+      <div class="node" style="left:16px; top:92px; background:#e0555f"></div>
+      <div class="node" style="left:30px; top:128px; background:#e3712f"></div>
+      <div class="node" style="left:16px; top:164px; background:#e0555f"></div>
+    </div>
+
+    <div class="row" style="top:20px">
+      <div class="left">
+        <span class="hash">34b7b20</span>
+        <span class="chip head"><svg class="i" width="10" height="10" viewBox="0 0 24 24" style="stroke-width:3.5"><path d="M20 6 9 17l-5-5"/></svg>local/pending-prs</span>
+        <span class="msg">docs(diff): the comment gutter is a speech bubble, not a "+"</span>
+      </div>
+      <div class="right"><span>ywchan</span><span>2 小時前</span></div>
+    </div>
+    <div class="row dim" style="top:56px">
+      <div class="left"><span class="hash">ffbfb5b</span><span class="msg">wip(ui): give row hover its own token instead of a faint surface tint</span></div>
+      <div class="right"><span>ywchan</span><span>3 小時前</span></div>
+    </div>
+    <div class="row dim" style="top:92px">
+      <div class="left"><span class="hash">01fb815</span><span class="chip remote">origin/master</span><span class="msg">feat(diff): fold and unfold the unchanged stretches from the gutter (#393)</span></div>
+      <div class="right"><span>ywchan</span><span>昨天</span></div>
+    </div>
+    <div class="row dim" style="top:128px">
+      <div class="left"><span class="hash">e35d434</span><span class="msg">feat(diff): switch a diff between side-by-side and inline (#392)</span></div>
+      <div class="right"><span>ywchan</span><span>昨天</span></div>
+    </div>
+    <div class="row dim" style="top:164px">
+      <div class="left"><span class="hash">0cf804b</span><span class="msg">fix(diff): align the diff pane header controls with every other pane (#390)</span></div>
+      <div class="right"><span>ywchan</span><span>2 天前</span></div>
+    </div>
+  </div>
+  <div class="miss">↑ 沒有任何一列代表「我現在手上未提交的 7 個檔」</div>
+</div>
+
+<!-- ============ 圖 2: 提案 ============ -->
+<div class="figure">
+  <div class="fig-label after">提案 — 第 0 列是工作區:空心虛線節點 + 虛線接到 HEAD;筆數緊接在文字後面,右欄留空</div>
+  <div class="graph" style="height:240px">
+    <div class="lanes">
+      <svg viewBox="0 0 124 240" preserveAspectRatio="none">
+        <path d="M16,40 L16,76" stroke="#5eaab5" stroke-width="2" fill="none" stroke-dasharray="4 4" opacity=".9"/>
+        <path d="M16,76 L16,220" stroke="#e0555f" stroke-width="2" fill="none" opacity=".8"/>
+        <path d="M16,148 C16,166 30,166 30,184 L30,220" stroke="#e3712f" stroke-width="2" fill="none" opacity=".8"/>
+      </svg>
+      <div class="node wt" style="left:16px; top:40px"></div>
+      <div class="node head" style="left:16px; top:76px"></div>
+      <div class="node" style="left:16px; top:112px; background:#e0555f"></div>
+      <div class="node" style="left:16px; top:148px; background:#e0555f"></div>
+      <div class="node" style="left:30px; top:184px; background:#e3712f"></div>
+      <div class="node" style="left:16px; top:220px; background:#e0555f"></div>
+    </div>
+
+    <div class="row callout" style="top:40px">
+      <span class="note">新增的一列</span>
+      <div class="left">
+        <span class="hash none">•••••••</span>
+        <span class="msg">未提交的變更</span>
+        <span class="counts">
+          <span>已暫存 <b>3</b></span><span class="dot">·</span><span>未暫存 <b>4</b></span>
+        </span>
+      </div>
+      <div class="right"><span class="empty-right">(無作者 / 時間)</span></div>
+    </div>
+
+    <div class="row" style="top:76px">
+      <div class="left">
+        <span class="hash">34b7b20</span>
+        <span class="chip head"><svg class="i" width="10" height="10" viewBox="0 0 24 24" style="stroke-width:3.5"><path d="M20 6 9 17l-5-5"/></svg>local/pending-prs</span>
+        <span class="msg">docs(diff): the comment gutter is a speech bubble, not a "+"</span>
+      </div>
+      <div class="right"><span>ywchan</span><span>2 小時前</span></div>
+    </div>
+    <div class="row dim" style="top:112px">
+      <div class="left"><span class="hash">ffbfb5b</span><span class="msg">wip(ui): give row hover its own token instead of a faint surface tint</span></div>
+      <div class="right"><span>ywchan</span><span>3 小時前</span></div>
+    </div>
+    <div class="row dim" style="top:148px">
+      <div class="left"><span class="hash">01fb815</span><span class="chip remote">origin/master</span><span class="msg">feat(diff): fold and unfold the unchanged stretches from the gutter (#393)</span></div>
+      <div class="right"><span>ywchan</span><span>昨天</span></div>
+    </div>
+    <div class="row dim" style="top:184px">
+      <div class="left"><span class="hash">e35d434</span><span class="msg">feat(diff): switch a diff between side-by-side and inline (#392)</span></div>
+      <div class="right"><span>ywchan</span><span>昨天</span></div>
+    </div>
+    <div class="row dim" style="top:220px">
+      <div class="left"><span class="hash">0cf804b</span><span class="msg">fix(diff): align the diff pane header controls with every other pane (#390)</span></div>
+      <div class="right"><span>ywchan</span><span>2 天前</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 圖 3: 文字寫法比較 ============ -->
+<div class="figure">
+  <div class="fig-label after">列上的文字 — 筆數放文字後面的三種寫法</div>
+  <div class="variants">
+    <div class="variant">
+      <div class="row">
+        <div class="left">
+          <span class="hash none">•••••••</span>
+          <span class="msg">未提交的變更</span>
+          <span class="counts"><span>已暫存 <b>3</b></span><span class="dot">·</span><span>未暫存 <b>4</b></span></span>
+        </div>
+      </div>
+      <span class="tag pick">A — 分開標,一眼知道有多少已經 add 過</span>
+    </div>
+    <div class="variant">
+      <div class="row">
+        <div class="left">
+          <span class="hash none">•••••••</span>
+          <span class="msg">未提交的變更</span>
+          <span class="counts"><b>7</b> 個檔</span>
+        </div>
+      </div>
+      <span class="tag">B — 只給總數,最安靜;但看不出暫存狀態</span>
+    </div>
+    <div class="variant">
+      <div class="row">
+        <div class="left">
+          <span class="hash none">•••••••</span>
+          <span class="msg">7 個未提交的變更</span>
+          <span class="counts"><span>3</span><span class="dot">/</span><span>4</span></span>
+        </div>
+      </div>
+      <span class="tag">C — 數字併進句子;窄視窗會先被截掉數字</span>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 圖 4: 畫法規格 ============ -->
+<div class="figure">
+  <div class="fig-label after">畫法 — 三種節點要一眼分得出來</div>
+  <div class="spec-card">
+    <svg width="290" height="140" viewBox="0 0 290 140">
+      <path d="M28,26 L28,66" stroke="#5eaab5" stroke-width="2" stroke-dasharray="4 4" fill="none"/>
+      <path d="M28,66 L28,114" stroke="#e0555f" stroke-width="2" fill="none" opacity=".8"/>
+      <circle cx="28" cy="26" r="7" fill="#222" stroke="#5eaab5" stroke-width="2" stroke-dasharray="3.5 3"/>
+      <circle cx="28" cy="66" r="10" fill="none" stroke="#5eaab5" stroke-width="3" opacity=".28"/>
+      <circle cx="28" cy="66" r="6" fill="#5eaab5" stroke="#222" stroke-width="2"/>
+      <circle cx="28" cy="110" r="6" fill="#e0555f" stroke="#222" stroke-width="2"/>
+      <text x="50" y="30" fill="#bfbaaa" font-size="11" font-family="Consolas, monospace">未提交(空心+虛線描邊)</text>
+      <text x="50" y="70" fill="#bfbaaa" font-size="11" font-family="Consolas, monospace">HEAD(實心 accent + 光暈)</text>
+      <text x="50" y="114" fill="#bfbaaa" font-size="11" font-family="Consolas, monospace">一般 commit(實心 lane 色)</text>
+    </svg>
+    <div class="spec-note">
+      · 節點:半徑 7,填 <code>--bg</code>、<code>2px dashed --accent</code>,不吃 <code>BRANCH_COLORS</code> 任何一色<br>
+      · 連線:未提交 &rarr; HEAD 這一段畫 <code>stroke-dasharray</code>,顏色走 accent 而不是 lane 色<br>
+      · hash 欄:沒有 hash,放淡化的 <code>•••••••</code> 佔位,寬度和真 hash 對齊<br>
+      · 筆數:接在訊息後面,不丟到最右邊;右欄(作者/時間)整個留空 —— 留白本身就在說「這不是 commit」<br>
+      · 這一列<b>不佔 lane</b>、不進 <code>computeGraphLayout</code> 的配色循環
+    </div>
+  </div>
+</div>
+
+<!-- ============ 圖 5: 選中 → 下方面板 ============ -->
+<div class="figure">
+  <div class="fig-label after">提案 — 點這一列:<b>下方</b>詳情面板左欄改列未提交的檔案,右欄照舊是差異 / AI</div>
+  <div class="stack">
+    <div class="graph" style="height:160px">
+      <div class="lanes">
+        <svg viewBox="0 0 124 150" preserveAspectRatio="none">
+          <path d="M16,20 L16,56" stroke="#5eaab5" stroke-width="2" fill="none" stroke-dasharray="4 4" opacity=".9"/>
+          <path d="M16,56 L16,128" stroke="#e0555f" stroke-width="2" fill="none" opacity=".8"/>
+        </svg>
+        <div class="node wt selected" style="left:16px; top:20px"></div>
+        <div class="node head" style="left:16px; top:56px"></div>
+        <div class="node" style="left:16px; top:92px; background:#e0555f"></div>
+        <div class="node" style="left:16px; top:128px; background:#e0555f"></div>
+      </div>
+      <div class="row selected" style="top:20px">
+        <div class="left">
+          <span class="hash none">•••••••</span>
+          <span class="msg">未提交的變更</span>
+          <span class="counts"><span>已暫存 <b>3</b></span><span class="dot">·</span><span>未暫存 <b>4</b></span></span>
+        </div>
+        <div class="right"></div>
+      </div>
+      <div class="row dim" style="top:56px">
+        <div class="left"><span class="hash">34b7b20</span><span class="chip head"><svg class="i" width="10" height="10" viewBox="0 0 24 24" style="stroke-width:3.5"><path d="M20 6 9 17l-5-5"/></svg>local/pending-prs</span><span class="msg">docs(diff): the comment gutter is a speech bubble, not a "+"</span></div>
+        <div class="right"><span>ywchan</span><span>2 小時前</span></div>
+      </div>
+      <div class="row dim" style="top:92px">
+        <div class="left"><span class="hash">ffbfb5b</span><span class="msg">wip(ui): give row hover its own token instead of a faint surface tint</span></div>
+        <div class="right"><span>ywchan</span><span>3 小時前</span></div>
+      </div>
+      <div class="row dim" style="top:128px">
+        <div class="left"><span class="hash">01fb815</span><span class="chip remote">origin/master</span><span class="msg">feat(diff): fold and unfold the unchanged stretches (#393)</span></div>
+        <div class="right"><span>ywchan</span><span>昨天</span></div>
+      </div>
+    </div>
+
+    <div class="resizer"></div>
+
+    <div class="panel">
+      <div class="p-head">
+        <span class="id">
+          <svg class="i" width="13" height="13" viewBox="0 0 24 24" style="color:#5eaab5"><circle cx="12" cy="12" r="9" stroke-dasharray="3.5 3"/></svg>
+          <span style="color:var(--accent); font-family:Consolas,monospace; font-size:12px; font-weight:600">未提交的變更</span>
+          <span style="color:var(--fg-subtle); font-family:Consolas,monospace; font-size:11px">相對於 34b7b20</span>
+        </span>
+        <span class="x"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
+      </div>
+      <div class="p-body">
+        <div class="p-left">
+          <div class="files-head">
+            <span>變更的檔案 (7)</span>
+            <svg class="i" width="13" height="13" viewBox="0 0 24 24" style="color:var(--fg-subtle)"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>
+          </div>
+          <div class="d-group">已暫存 <span class="n">(3)</span></div>
+          <div class="file-row on"><span class="st st-m">M</span><span class="name">src/modules/git-graph/GitGraph.tsx</span></div>
+          <div class="file-row"><span class="st st-a">A</span><span class="name">src/modules/git-graph/WorkingTreeRow.tsx</span></div>
+          <div class="file-row"><span class="st st-m">M</span><span class="name">src/modules/git-graph/types.ts</span></div>
+          <div class="d-group">未暫存 <span class="n">(4)</span></div>
+          <div class="file-row"><span class="st st-m">M</span><span class="name">src/modules/git-graph/GitGraphTabContent.tsx</span></div>
+          <div class="file-row"><span class="st st-m">M</span><span class="name">src/stores/settingsStore.ts</span></div>
+          <div class="file-row"><span class="st st-d">D</span><span class="name">src/legacy/oldGraphRow.tsx</span></div>
+          <div class="file-row"><span class="st st-q">?</span><span class="name">docs/uncommitted-node.md</span></div>
+        </div>
+        <div class="p-right">
+          <div class="tabs">
+            <span class="tab on">差異</span>
+            <span class="tab">AI</span>
+          </div>
+          <div class="diff">
+            <div class="dl meta">diff --git a/src/modules/git-graph/GitGraph.tsx b/…</div>
+            <div class="dl hunk">@@ -196,6 +196,14 @@</div>
+            <div class="dl">   const svgHeight = commits.length * ROW_HEIGHT …</div>
+            <div class="dl add">+  // 工作區那一列不佔 lane,只把每個 commit 往下推一格</div>
+            <div class="dl add">+  const rowOffset = showWorkingTree ? ROW_HEIGHT : 0;</div>
+            <div class="dl del">-  const visibleCommits = commits.slice(visibleStart, visibleEnd);</div>
+            <div class="dl add">+  const visibleCommits = commits.slice(visibleStart, visibleEnd);</div>
+            <div class="dl">   if (commits.length === 0) {</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 圖 6: 右鍵 ============ -->
+<div class="figure">
+  <div class="fig-label after">右鍵 — 這一列有自己的選單,不套用 commit 的那一份(沒有 hash 可複製、不能 checkout)</div>
+  <div style="display:flex; gap:28px; align-items:flex-start">
+    <div class="menu">
+      <div class="mi hot">到原始碼控制側欄</div>
+      <div class="sep"></div>
+      <div class="mi">重新整理</div>
+    </div>
+    <div class="spec-note" style="max-width:600px">
+      <b>考慮新增</b> —— 這一列的選單將來可以長出來的動作,以及各自還缺什麼:<br>
+      · <b>全部暫存</b> —— 最接近可以做的。<code>git_stage</code> 是單檔的,迴圈呼叫就成;
+        要決定的是一個檔失敗時要不要整批回退。<br>
+      · <b>Stash 起來…</b> —— 需要新的後端命令。stash 目前只讀:圖可以畫 <code>refs/stash</code>,但沒有 stash push。
+        跟這一列特別合拍 —— stash 完工作區就乾淨了,這一列會自己變安靜。<br>
+      · <b>開啟所有變更</b> —— 等「所有變更」分頁落地再接。
+        目前 <code>src/modules/diff/</code> 只有單檔的 <code>DiffTabContent</code>,還沒有可以指向的東西。<br>
+      · <b>捨棄所有變更</b> —— 需要新的後端命令,而且是四項裡唯一不可逆的。
+        後端只有 <code>git_restore_file</code>(單檔),側欄的捨棄是單檔 + 確認對話框,
+        還明確排除未追蹤檔(<code>status !== "?"</code>);要先定義「全部」包不包含未追蹤檔 ——
+        包含的話得動到 <code>git clean</code>,而且一定要有確認對話框。
+    </div>
+  </div>
+</div>
+
+<!-- ============ 圖 7: 沒有變更 ============ -->
+<div class="figure">
+  <div class="fig-label after">乾淨的工作區 — 建議 B:這一列常駐,只是變安靜。理由是版面不跳</div>
+
+  <div style="margin-bottom:6px; font-size:11px; font-family:Consolas,monospace; color:var(--fg-subtle)">A — 乾淨時整列不畫(commit 完的瞬間,整張圖往上跳一個 36px 的 rowHeight)</div>
+  <div class="graph" style="height:112px; opacity:.75">
+    <div class="lanes">
+      <svg viewBox="0 0 124 112" preserveAspectRatio="none">
+        <path d="M16,20 L16,92" stroke="#e0555f" stroke-width="2" fill="none" opacity=".8"/>
+      </svg>
+      <div class="node head" style="left:16px; top:20px"></div>
+      <div class="node" style="left:16px; top:56px; background:#e0555f"></div>
+      <div class="node" style="left:16px; top:92px; background:#e0555f"></div>
+    </div>
+    <div class="row" style="top:20px">
+      <div class="left"><span class="hash">34b7b20</span><span class="chip head"><svg class="i" width="10" height="10" viewBox="0 0 24 24" style="stroke-width:3.5"><path d="M20 6 9 17l-5-5"/></svg>local/pending-prs</span><span class="msg">docs(diff): the comment gutter is a speech bubble, not a "+"</span></div>
+      <div class="right"><span>ywchan</span><span>2 小時前</span></div>
+    </div>
+    <div class="row dim" style="top:56px"><div class="left"><span class="hash">ffbfb5b</span><span class="msg">wip(ui): give row hover its own token instead of a faint surface tint</span></div><div class="right"><span>ywchan</span><span>3 小時前</span></div></div>
+    <div class="row dim" style="top:92px"><div class="left"><span class="hash">01fb815</span><span class="chip remote">origin/master</span><span class="msg">feat(diff): fold and unfold the unchanged stretches from the gutter (#393)</span></div><div class="right"><span>ywchan</span><span>昨天</span></div></div>
+  </div>
+
+  <div style="margin:18px 0 6px; font-size:11px; font-family:Consolas,monospace; color:var(--accent)">B — 常駐,乾淨時整列淡下去、節點描邊轉灰(位置永遠不動,永遠有個固定的地方可以點)</div>
+  <div class="graph" style="height:148px">
+    <div class="lanes">
+      <svg viewBox="0 0 124 148" preserveAspectRatio="none">
+        <path d="M16,20 L16,56" stroke="#85827b" stroke-width="2" fill="none" stroke-dasharray="4 4" opacity=".45"/>
+        <path d="M16,56 L16,128" stroke="#e0555f" stroke-width="2" fill="none" opacity=".8"/>
+      </svg>
+      <div class="node wt quiet" style="left:16px; top:20px"></div>
+      <div class="node head" style="left:16px; top:56px"></div>
+      <div class="node" style="left:16px; top:92px; background:#e0555f"></div>
+      <div class="node" style="left:16px; top:128px; background:#e0555f"></div>
+    </div>
+    <div class="row quiet" style="top:20px">
+      <div class="left"><span class="hash none">•••••••</span><span class="msg">沒有未提交的變更</span></div>
+      <div class="right"></div>
+    </div>
+    <div class="row" style="top:56px">
+      <div class="left"><span class="hash">34b7b20</span><span class="chip head"><svg class="i" width="10" height="10" viewBox="0 0 24 24" style="stroke-width:3.5"><path d="M20 6 9 17l-5-5"/></svg>local/pending-prs</span><span class="msg">docs(diff): the comment gutter is a speech bubble, not a "+"</span></div>
+      <div class="right"><span>ywchan</span><span>2 小時前</span></div>
+    </div>
+    <div class="row dim" style="top:92px"><div class="left"><span class="hash">ffbfb5b</span><span class="msg">wip(ui): give row hover its own token instead of a faint surface tint</span></div><div class="right"><span>ywchan</span><span>3 小時前</span></div></div>
+    <div class="row dim" style="top:128px"><div class="left"><span class="hash">01fb815</span><span class="chip remote">origin/master</span><span class="msg">feat(diff): fold and unfold the unchanged stretches from the gutter (#393)</span></div><div class="right"><span>ywchan</span><span>昨天</span></div></div>
+  </div>
+
+  <div class="spec-note" style="margin-top:12px; max-width:960px">
+    選 B 的理由:A 的代價每次提交都發生 —— 把最後一個檔 stage 掉、或 commit 完成的瞬間,
+    整張圖往上跳 36px,游標底下本來是哪一列就換人了;反過來隨便改一個檔又整張往下推。
+    B 的代價只是永遠佔掉一列高度。<br>
+    乾淨時這一列:文字用 <code>--fg-subtle</code>、節點描邊從 accent 轉灰虛線、接 HEAD 的虛線一併淡化;
+    仍然可以點(下方面板顯示「沒有變更」),但不再吸引目光。
+  </div>
+</div>
+
+<!-- ============ 圖 8: 設定 ============ -->
+<div class="figure">
+  <div class="fig-label after">設定 — Git Graph 區塊新增一個開關(預設開);關掉就完全回到現況</div>
+  <div class="settings">
+    <div class="s-title">Git Graph</div>
+
+    <div class="s-new">
+      <div class="s-label">未提交的變更</div>
+      <div class="s-desc">在圖的最上方常駐一列,顯示工作區的狀態。</div>
+      <label class="s-check">
+        <span class="cb on"><svg class="i" width="10" height="10" viewBox="0 0 24 24" style="stroke-width:3.5"><path d="M20 6 9 17l-5-5"/></svg></span>
+        在圖最上方顯示未提交的變更
+      </label>
+      <div class="s-hint">關掉之後,圖的第一列就是最新的 commit。</div>
+    </div>
+
+    <div class="s-sep"></div>
+
+    <div class="s-label">Ref 標籤</div>
+    <div class="s-desc">收斂 commit 列上的 ref chip,讓 commit 訊息有位置可站。</div>
+    <label class="s-check">
+      <span class="cb on"><svg class="i" width="10" height="10" viewBox="0 0 24 24" style="stroke-width:3.5"><path d="M20 6 9 17l-5-5"/></svg></span>
+      合併同名的本地與遠端分支
+    </label>
+    <div class="s-hint">local 與 origin 指到同一個 commit 時只畫一顆 chip。</div>
+    <label class="s-check">
+      <span class="cb on"><svg class="i" width="10" height="10" viewBox="0 0 24 24" style="stroke-width:3.5"><path d="M20 6 9 17l-5-5"/></svg></span>
+      隱藏 origin/HEAD
+    </label>
+    <div class="s-hint">它只是遠端的預設分支指標,不帶資訊。</div>
+  </div>
+</div>
+
+</body>
+</html>

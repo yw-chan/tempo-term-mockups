@@ -1,0 +1,1516 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Git Graph 的 Lane 預算</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+TC:wght@400;500;600;700&display=swap">
+<style>
+/* Deliberately single-theme: every specimen on this page is a mock of the
+   app's dark Git Graph pane, and the surrounding commentary shares its
+   surface so the two read as one document. Every colour is painted
+   explicitly, so the page holds on either host ground. */
+:root {
+  --ground: #171717;
+  --surface: #222222;
+  --raised: #292929;
+  --line: #333333;
+  --line-strong: #454545;
+  --fg: #dbd7ca;
+  --fg-muted: #bfbaaa;
+  --fg-subtle: #85827b;
+  --accent: #5eaab5;
+  --accent-ink: #10282c;
+  --bad: #cb7676;
+  --ok: #4d9375;
+  --warn: #e6cc77;
+  --sans: "IBM Plex Sans TC", "Noto Sans TC", "Microsoft JhengHei", "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", Consolas, "JetBrains Mono", monospace;
+  /* The app's own faces, used only inside specimens so they read as the app. */
+  --app-sans: "Segoe UI", "Noto Sans TC", sans-serif;
+  --app-mono: Consolas, "JetBrains Mono", monospace;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--ground);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.75;
+  margin: 0;
+  padding: 40px 24px 96px;
+}
+.wrap { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 44px; }
+
+/* ---------- masthead ---------- */
+.masthead { display: flex; flex-direction: column; gap: 14px; }
+.eyebrow {
+  font-family: var(--mono); font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--accent);
+}
+h1 {
+  font-size: 34px; font-weight: 600; line-height: 1.25; margin: 0;
+  text-wrap: balance; letter-spacing: -.01em;
+}
+.standfirst { font-size: 15px; color: var(--fg-muted); max-width: 66ch; margin: 0; }
+
+/* the one number that decides everything */
+.headline-figure {
+  display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap;
+  border-left: 2px solid var(--accent);
+  padding: 4px 0 4px 18px; margin-top: 6px;
+}
+.headline-figure .big {
+  font-family: var(--mono); font-size: 30px; font-weight: 600;
+  color: var(--fg); font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+}
+.headline-figure .big em { font-style: normal; color: var(--accent); }
+.headline-figure .cap { font-size: 13px; color: var(--fg-subtle); max-width: 46ch; }
+
+/* ---------- sections ---------- */
+section { display: flex; flex-direction: column; gap: 16px; }
+h2 {
+  font-size: 19px; font-weight: 600; margin: 0;
+  display: flex; align-items: center; gap: 12px;
+}
+h2 .num {
+  font-family: var(--mono); font-size: 12px; font-weight: 500;
+  color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 4px; padding: 1px 7px; flex: none;
+}
+h3 { font-size: 15px; font-weight: 600; margin: 0; color: var(--fg); }
+p { margin: 0; max-width: 68ch; color: var(--fg-muted); }
+p strong { color: var(--fg); font-weight: 600; }
+code {
+  font-family: var(--mono); font-size: .88em;
+  background: var(--raised); border: 1px solid var(--line);
+  border-radius: 3px; padding: 0 4px; color: var(--fg);
+}
+a { color: var(--accent); text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); text-underline-offset: 3px; }
+
+/* ---------- specimen frame ---------- */
+.specimen {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: var(--app-sans);
+}
+.specimen-bar {
+  height: 30px; display: flex; align-items: center; gap: 10px;
+  padding: 0 12px; border-bottom: 1px solid var(--line);
+  background: var(--raised);
+  font-family: var(--mono); font-size: 11px; color: var(--fg-subtle);
+}
+.specimen-bar .tag { color: var(--fg); font-weight: 500; }
+.specimen-bar .sep { color: var(--line-strong); }
+.specimen-bar .warnflag { margin-left: auto; color: var(--bad); }
+.specimen-bar .okflag { margin-left: auto; color: var(--ok); }
+.graph-host { position: relative; overflow-x: auto; }
+
+/* rows drawn beside the lane gutter */
+.rowlist { position: absolute; inset: 0; pointer-events: none; }
+.grow {
+  position: absolute; left: 0; right: 0; height: 36px;
+  display: flex; align-items: center; gap: 12px;
+  padding-right: 14px;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}
+.grow .hash {
+  font-family: var(--app-mono); font-size: 12px; font-weight: 600;
+  color: var(--accent); flex: none;
+}
+.grow .msg {
+  font-size: 12.5px; color: var(--fg-muted);
+  overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.chip {
+  display: inline-flex; align-items: center; font-family: var(--app-mono);
+  font-size: 10.5px; border-radius: 4px; padding: 0 6px;
+  border: 1px solid var(--line-strong); color: var(--fg-subtle);
+  background: var(--surface); flex: none;
+}
+.chip.head {
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  background: color-mix(in srgb, var(--ok) 16%, transparent);
+  color: var(--ok);
+}
+
+/* callouts pinned over a specimen */
+.pin {
+  position: absolute; z-index: 30;
+  background: var(--bad); color: #1b0f0f;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 600;
+  border-radius: 4px; padding: 2px 8px; white-space: nowrap;
+  transform: translateY(-50%);
+}
+.pin.good { background: var(--accent); color: var(--accent-ink); }
+.pin::before {
+  content: ""; position: absolute; right: 100%; top: 50%;
+  width: 14px; height: 1px; background: currentColor; opacity: .6;
+}
+
+/* ---------- two panes side by side ---------- */
+.mini-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 860px) { .mini-pair { grid-template-columns: 1fr; } }
+.mini-col { min-width: 0; }
+.mini-col .graph-host { overflow-x: auto; }
+.mini-col .grow .msg { font-size: 11.5px; }
+
+/* ---------- gutter comparison strip ---------- */
+.strip {
+  display: flex; gap: 0; align-items: flex-start;
+  overflow-x: auto; padding-bottom: 6px;
+}
+.strip-item {
+  flex: none; display: flex; flex-direction: column; gap: 8px;
+  padding: 0 20px; border-left: 1px dashed var(--line);
+}
+.strip-item:first-child { padding-left: 0; border-left: none; }
+.strip-head { display: flex; flex-direction: column; gap: 2px; }
+.strip-head .name { font-size: 12.5px; font-weight: 600; color: var(--fg); }
+.strip-head .w {
+  font-family: var(--mono); font-size: 18px; font-weight: 600;
+  color: var(--accent); font-variant-numeric: tabular-nums;
+}
+.strip-head .note { font-family: var(--mono); font-size: 10.5px; color: var(--fg-subtle); }
+.strip-head .note.bad { color: var(--bad); }
+.gutter-box {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; overflow: hidden;
+}
+.ruler {
+  height: 16px; position: relative; margin-top: 2px;
+  border-top: 1px solid var(--line-strong);
+}
+.ruler::before, .ruler::after {
+  content: ""; position: absolute; top: -4px; width: 1px; height: 8px;
+  background: var(--line-strong);
+}
+.ruler::before { left: 0; }
+.ruler::after { right: 0; }
+
+/* ---------- interactive ---------- */
+.lab {
+  display: grid; grid-template-columns: 300px minmax(0, 1fr);
+  gap: 28px; align-items: start;
+}
+@media (max-width: 820px) { .lab { grid-template-columns: 1fr; } }
+.controls {
+  display: flex; flex-direction: column; gap: 22px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 8px; padding: 20px;
+}
+.ctl { display: flex; flex-direction: column; gap: 8px; }
+.ctl-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.ctl label { font-size: 12.5px; color: var(--fg-muted); }
+.ctl label .hint {
+  font-style: normal; font-family: var(--mono); font-size: 10.5px;
+  color: var(--fg-subtle); margin-left: 6px;
+}
+.ctl output {
+  font-family: var(--mono); font-size: 14px; font-weight: 600;
+  color: var(--fg); font-variant-numeric: tabular-nums;
+}
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 3px; border-radius: 2px;
+  background: var(--line-strong); outline: none; margin: 6px 0;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--surface); cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 15px; height: 15px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--surface); cursor: pointer;
+}
+input[type="range"]:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent); }
+.toggle {
+  display: flex; align-items: flex-start; gap: 9px; cursor: pointer;
+  font-size: 12.5px; color: var(--fg-muted);
+}
+.toggle input { margin: 3px 0 0; accent-color: var(--accent); width: 14px; height: 14px; flex: none; }
+.toggle em {
+  display: block; font-style: normal; font-family: var(--mono);
+  font-size: 10.5px; color: var(--fg-subtle); margin-top: 1px;
+}
+.readout {
+  border-top: 1px solid var(--line); padding-top: 16px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.kv { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.kv .k { font-size: 12px; color: var(--fg-subtle); }
+.kv .v {
+  font-family: var(--mono); font-size: 13px; font-weight: 500;
+  color: var(--fg); font-variant-numeric: tabular-nums;
+}
+.verdict {
+  font-family: var(--mono); font-size: 11.5px; line-height: 1.6;
+  border-radius: 5px; padding: 8px 10px;
+}
+.verdict.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.verdict.bad { color: var(--bad); background: color-mix(in srgb, var(--bad) 12%, transparent); }
+
+/* ---------- options table ---------- */
+.table-scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 620px; }
+th, td {
+  text-align: left; padding: 10px 14px;
+  border-bottom: 1px solid var(--line); vertical-align: top;
+}
+th {
+  font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--fg-subtle); font-weight: 600; border-bottom-color: var(--line-strong);
+}
+td { font-size: 13px; color: var(--fg-muted); }
+td .opt { color: var(--fg); font-weight: 600; display: block; }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--fg); }
+tr.pick td { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+tr.pick td .opt { color: var(--accent); }
+
+/* ---------- prior art ---------- */
+.art { display: flex; flex-direction: column; gap: 2px; }
+.art-row {
+  display: grid; grid-template-columns: 190px minmax(0, 1fr);
+  gap: 20px; padding: 14px 0; border-top: 1px solid var(--line);
+}
+@media (max-width: 700px) { .art-row { grid-template-columns: 1fr; gap: 6px; } }
+.art-row:first-child { border-top: none; }
+.art-name { font-size: 13.5px; font-weight: 600; color: var(--fg); }
+.art-name .kind {
+  display: block; font-family: var(--mono); font-size: 10.5px;
+  font-weight: 400; color: var(--fg-subtle); letter-spacing: .04em;
+}
+.art-body { font-size: 13px; color: var(--fg-muted); }
+.art-body .src { font-family: var(--mono); font-size: 11px; color: var(--fg-subtle); display: block; margin-top: 4px; }
+
+/* ---------- closing recommendation ---------- */
+.rec {
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 8px; padding: 22px 24px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  display: flex; flex-direction: column; gap: 14px;
+}
+.rec ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; }
+.rec li { font-size: 13.5px; color: var(--fg-muted); }
+.rec li strong { color: var(--fg); }
+
+.footnote { font-size: 12px; color: var(--fg-subtle); max-width: 72ch; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">tempo-term · git-graph · graphLayout.ts</div>
+    <h1>Git Graph 的 Lane 預算</h1>
+    <p class="standfirst">
+      <code>maxLane = 5</code> 不是 lane 演算法的上限,而是「畫」的上限。第 7 條之後的分支線
+      被夾到同一個 x,疊在一起——而且因為有兩處邏輯拿 x 座標當 lane 相等的代理,這個純視覺的截斷
+      會悄悄弄壞 merge 彎折與鍵盤導覽。以下是同一份 18 個 commit、8 條 lane 的歷史,在幾種幾何
+      設定下實際畫出來的樣子——圖是跑真的 <code>computeGraphLayout</code> 規則算的,不是示意圖——
+      後面接各家工具怎麼處理同一個問題,包含一個有人做過、測過、然後拒絕的方案。
+    </p>
+    <div class="headline-figure">
+      <div class="big">6 欄 <em>&rarr;</em> 8 欄</div>
+      <div class="cap">
+        把欄寬從 14px 收到 10px、欄數放到實際用量,gutter 從 124px 變成
+        <strong style="color:var(--fg)">120px</strong>——多兩欄,而且比現在還窄 4px。
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ 1. 現況 ============ -->
+  <section>
+    <h2><span class="num">01</span>現況會畫成什麼樣</h2>
+    <p>
+      這份歷史有 <strong>8 條同時開著的分支線</strong>——就是你這個 repo 現在的狀態,一堆還沒合併的
+      feature 分支。lane 6 和 lane 7 被 <code>Math.min(lane, maxLane)</code> 夾到和 lane 5 同一欄。
+    </p>
+    <div class="specimen">
+      <div class="specimen-bar">
+        <span class="tag">現況</span><span class="sep">/</span>
+        <span>maxLane 5 · laneWidth 14px · gutter 124px</span>
+        <span class="warnflag" id="flag-now"></span>
+      </div>
+      <div class="graph-host" id="spec-now"></div>
+    </div>
+    <p>
+      三條不同顏色的線畫在同一條軌道上,後畫的蓋掉先畫的。<strong>顏色其實有 7 個,夠用</strong>——
+      瓶頸是幾何,不是調色盤。
+    </p>
+  </section>
+
+  <!-- ============ 2. bug ============ -->
+  <section>
+    <h2><span class="num">02</span>截斷不只是難看,它在說謊</h2>
+    <p>
+      上圖第 7 列那個 merge 是關鍵。<code>f6f0754</code> 在 lane 6,把 lane 7 的 <code>a203eff</code>
+      併進來。兩者的 x 被夾成相同,於是:
+    </p>
+    <div class="strip">
+      <div class="strip-item">
+        <div class="strip-head">
+          <span class="name">截斷後(現況)</span>
+          <span class="w" style="color:var(--bad)">直線</span>
+          <span class="note bad">彎折消失,看起來像同一條線上的父節點</span>
+        </div>
+        <div class="gutter-box" id="merge-clamped"></div>
+      </div>
+      <div class="strip-item">
+        <div class="strip-head">
+          <span class="name">應該長這樣</span>
+          <span class="w" style="color:var(--ok)">彎折</span>
+          <span class="note">lane 6 的 commit 併入 lane 7 的分支</span>
+        </div>
+        <div class="gutter-box" id="merge-true"></div>
+      </div>
+    </div>
+    <p>
+      原因在 <code>graphLayout.ts</code> 兩處都用 x 相等判斷 lane 相等:
+      <code>edgePath</code> 的 <code>if (px === cx)</code> 走直線分支;
+      <code>laneContinuationRowIndex</code> 用 <code>e.cx === e.px</code> 找「同一條 lane 的延續」。
+      後者餵的是 <code>GitGraph.tsx:249</code> 的鍵盤導覽——所以
+      <strong>Shift+↑/↓ 會沿著這條不存在的直線跳到錯的 commit</strong>。
+    </p>
+    <p>
+      修法與視覺無關,而且該先做:<code>GraphEdge</code> 已經帶了子節點的 <code>lane</code>,補一個
+      <code>parentLane</code>,兩處改成比 lane index。截斷就退回成純視覺,永遠不會對邏輯說謊。
+    </p>
+  </section>
+
+  <!-- ============ 3. 四個方案 ============ -->
+  <section>
+    <h2><span class="num">03</span>四種幾何,同一份歷史</h2>
+    <p>
+      只畫 lane 欄,同一個垂直比例並排,寬度差距可以直接目視比較。
+    </p>
+    <div class="strip" id="strip"></div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>方案</th><th>欄寬</th><th>欄數</th><th>gutter</th><th>取捨</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="opt">現況</span>maxLane 5</td>
+            <td class="num">14px</td><td class="num">6</td><td class="num">124px</td>
+            <td>3 條線疊在最後一欄,merge 畫錯</td>
+          </tr>
+          <tr>
+            <td><span class="opt">a · 常數調大</span>maxLane 6</td>
+            <td class="num">14px</td><td class="num">7</td><td class="num">138px</td>
+            <td>最便宜,但只是把牆往後移一格</td>
+          </tr>
+          <tr>
+            <td><span class="opt">b · 自適應欄數</span>依實際用量</td>
+            <td class="num">14px</td><td class="num">8</td><td class="num">152px</td>
+            <td>全部分開,訊息欄少 28px</td>
+          </tr>
+          <tr class="pick">
+            <td><span class="opt">b + d · 自適應＋收窄</span>推薦</td>
+            <td class="num">10px</td><td class="num">8</td><td class="num">120px</td>
+            <td>多兩欄,還比現況窄 4px;線密一點但各自獨立</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============ 4. 互動 ============ -->
+  <section>
+    <h2><span class="num">04</span>10px 會不會太擠?</h2>
+    <p>
+      這個問題只有看實際像素能回答。拉拉看——右邊是真的用
+      <code>computeGraphLayout</code> 的規則重畫,不是示意圖。
+    </p>
+    <p>
+      「lane 讓位」那個勾選框值得先按一下,但要看的是讀數而不是圖:
+      <strong>「實際用到的 lane」不會變。</strong>8 條,讓位前也是 8 條。
+      這不是 bug,是讓位的本質——下一節說明為什麼。
+    </p>
+    <div class="lab">
+      <div class="controls">
+        <div class="ctl">
+          <div class="ctl-top">
+            <label for="lw">lane 欄寬</label>
+            <output id="lw-out">10px</output>
+          </div>
+          <input type="range" id="lw" min="6" max="20" step="1" value="10">
+        </div>
+        <div class="ctl">
+          <div class="ctl-top">
+            <label for="ml">欄數上限 maxLane</label>
+            <output id="ml-out">7</output>
+          </div>
+          <input type="range" id="ml" min="2" max="12" step="1" value="7">
+        </div>
+        <div class="ctl">
+          <div class="ctl-top">
+            <label for="br">彎折高度<em class="hint">× 水平距離</em></label>
+            <output id="br-out">1.6×</output>
+          </div>
+          <input type="range" id="br" min="0.8" max="4" step="0.1" value="1.6">
+        </div>
+        <div class="ctl">
+          <div class="ctl-top">
+            <label for="cv">起彎時機<em class="hint">小 = 馬上就彎</em></label>
+            <output id="cv-out">0.42</output>
+          </div>
+          <input type="range" id="cv" min="0.1" max="0.9" step="0.01" value="0.42">
+        </div>
+        <label class="toggle" for="style-compact">
+          <input type="checkbox" id="style-compact">
+          <span>lane 讓位<em>空出來就有人補上,見下一節</em></span>
+        </label>
+        <label class="toggle" for="style-hollow">
+          <input type="checkbox" id="style-hollow">
+          <span>空心環節點<em>評估後不建議,見下一節</em></span>
+        </label>
+        <div class="readout">
+          <div class="kv"><span class="k">gutter 寬度</span><span class="v" id="r-gutter"></span></div>
+          <div class="kv"><span class="k">實際用到的 lane</span><span class="v" id="r-used"></span></div>
+          <div class="kv"><span class="k">訊息欄剩餘(列寬 900px)</span><span class="v" id="r-msg"></span></div>
+          <div class="verdict" id="r-verdict"></div>
+        </div>
+      </div>
+      <div class="specimen">
+        <div class="specimen-bar">
+          <span class="tag">即時</span><span class="sep">/</span>
+          <span id="lab-caption"></span>
+        </div>
+        <div class="graph-host" id="spec-lab"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 5. 畫法 ============ -->
+  <section>
+    <h2><span class="num">05</span>彎折:改一個常數</h2>
+    <p>
+      這是參考畫面(VS Code Git Graph,<code>graph.style: rounded</code>)最明顯的那件事,
+      跟欄寬無關、跟配色無關、跟 lane 配置無關。下面兩張<strong>只差彎折的長度與起彎時機</strong>——
+      欄寬同樣 14px、同一份 commit、同一套 lane 配置,3 條 lane。
+    </p>
+    <div class="bend-detail">
+      <div class="specimen">
+        <div class="specimen-bar">
+          <span class="tag">同一段彎折</span><span class="sep">/</span>
+          <span>放大 3 倍,兩條曲線疊在一起 · 起點與終點完全相同</span>
+        </div>
+        <div id="bend-detail" style="padding:6px 0 2px"></div>
+      </div>
+    </div>
+
+    <div class="mini-pair">
+      <div class="mini-col">
+        <div class="specimen">
+          <div class="specimen-bar"><span class="tag">現況</span><span class="sep">/</span><span>綁列高 · 36px 高 / 14px 寬</span><span class="warnflag">長寬比 0.39 · 看起來像直線</span></div>
+          <div class="graph-host" id="mini-now"></div>
+        </div>
+      </div>
+      <div class="mini-col">
+        <div class="specimen">
+          <div class="specimen-bar"><span class="tag">改後</span><span class="sep">/</span><span>1.6× 水平距離 · 起彎 0.42</span><span class="okflag">長寬比 0.63</span></div>
+          <div class="graph-host" id="mini-new"></div>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:12px">lane 讓位:參考畫面裡那條往左跳的線</h3>
+    <p>
+      參考畫面裡綠色那條在中間<strong>往左移了一欄</strong>。那不是彎折——那是
+      <strong>lane 讓位</strong>:上面那條只有單一 commit 的分支匯回主幹、空出第 1 欄之後,
+      綠色那條整條滑進去繼續往下走。
+    </p>
+    <p>
+      <strong>現在的演算法做不到這件事。</strong><code>computeGraphLayout</code> 的 lane 一旦配定就固定,
+      slot 被釋放之後只會等下一條<em style="font-style:normal;color:var(--fg)">新</em>分支來認領,
+      已經在跑的分支不會搬過去。左右兩張是同一份 commit、同樣的兩列彎折,只差有沒有讓位:
+    </p>
+    <div class="mini-pair">
+      <div class="mini-col">
+        <div class="specimen">
+          <div class="specimen-bar"><span class="tag">現況</span><span class="sep">/</span><span>同樣彎折 · lane 配定就不動</span><span class="warnflag">左邊留一個空欄</span></div>
+          <div class="graph-host" id="dense-now"></div>
+        </div>
+      </div>
+      <div class="mini-col">
+        <div class="specimen">
+          <div class="specimen-bar"><span class="tag">加上讓位</span><span class="sep">/</span><span>空出來就有人補上</span><span class="okflag">參考畫面的行為</span></div>
+          <div class="graph-host" id="dense-new"></div>
+        </div>
+      </div>
+    </div>
+    <p>
+      這跟 SourceGit 拒絕的 lane merging <strong>不是同一件事</strong>:讓位不合併任何線,
+      每條分支仍然自己一條、自己一個顏色,只是換了欄位。
+    </p>
+    <div class="rec" style="border-color:color-mix(in srgb, var(--bad) 40%, transparent);background:color-mix(in srgb, var(--bad) 8%, transparent)">
+      <h3 style="color:var(--bad)">但它省不到任何欄寬</h3>
+      <p>
+        欄數由<strong>尖峰</strong>決定,而尖峰在圖的<strong>最上面</strong>:分支的 tip 一條接一條
+        claim 新欄位,那時候還沒有任何 lane 被釋放,沒有洞可以補。讓位只在有東西結束之後才生效,
+        也就是圖的下半部——但 gutter 的寬度早就被上面那段決定了。
+      </p>
+      <p>
+        第 04 節的讀數就是證據:那份歷史開 8 條 lane,勾不勾讓位都是
+        <strong>「8 條(讓位前 8)」</strong>。它讓下半部看起來收攏,
+        <strong>卻一格欄寬都省不下來</strong>。
+      </p>
+      <p>
+        而「分支都沒合併、tip 全擠在最上面」正是這個 repo 的形狀——
+        也就是說,在最需要它的情況下,它剛好幫不上忙。
+      </p>
+    </div>
+    <p>
+      它有三條規則不能省,少一條就會畫成一團——列在這裡是因為它們是這次探索真正的產出,
+      而不是因為建議做:
+      <strong>一、往最近的欄位收</strong>,不是拉最右邊那條過來補洞(那會讓一條線橫跨半張圖);
+      <strong>二、不跨過留在原地的線</strong>,寧可讓欄位空著也不要兩條線交叉;
+      <strong>三、快結束的 lane 不搬</strong>,而且「快結束」要看那條 lane 的 run 還剩多長,
+      不是看下一個 commit 有多近——後者在密集分支上永遠是一兩列,等於把整個讓位關掉。
+      第三條需要一個<strong>前置掃描</strong>先走完整份歷史,
+      這也是它唯一動到架構的地方:現在的 <code>computeGraphLayout</code> 是單趟、純局部的。
+    </p>
+    <p>
+      它有三條規則不能省,少一條就會畫成一團:
+      <strong>一、往最近的欄位收</strong>,不是拉最右邊那條過來補洞(那會讓一條線橫跨半張圖);
+      <strong>二、不跨過留在原地的線</strong>,寧可讓欄位空著也不要兩條線交叉;
+      <strong>三、快結束的 lane 不搬</strong>——剩不到四列就要匯回主幹的線,
+      橫移一次再結束純粹是噪音,而圖的底部正是一堆線同時結束的地方,
+      每條都搬一次就會織成一個結。
+    </p>
+
+    <p>
+      真正的問題不在係數,在<strong>公式綁錯了東西</strong>。
+      <code>edgePath</code> 現在寫的是 <code>Math.min(rowHeight, py - cy)</code>——
+      彎折的高度跟著<strong>列高</strong>走。可是一次換道的水平距離是<strong>欄寬</strong>,
+      兩者無關:36px 高、14px 寬的 S,長寬比 0.39,<strong>不管控制點怎麼調都像一條斜直線</strong>。
+      拉成兩列只會變成 72 高 / 14 寬,更平。
+    </p>
+    <p>
+      量參考畫面也印證了這件事:它的欄距 27px、彎折垂直跨約 55px,
+      <strong>長寬比 0.49</strong>——比現況「彎」得多,而不是比較長。
+    </p>
+    <p>
+      所以規則應該是<strong>彎折高度跟著水平距離走</strong>:
+    </p>
+    <p style="font-family:var(--mono);font-size:12.5px;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px;max-width:none">
+      const bend = Math.min(Math.abs(px - cx) * 1.6, py - cy);
+    </p>
+    <p>
+      這樣曲線的形狀是<strong>恆定的</strong>:列高改了不影響、欄寬收窄也不影響、
+      跨一條 lane 和跨四條 lane 的 merge 弧度一致。上面用 <code>1.6×</code>,長寬比 0.63。
+      <code>min</code> 一樣負責「空間不夠就自動縮短」。
+    </p>
+    <p>
+      <strong>起彎時機</strong>是第二個、獨立的參數,而且它<strong>不影響水平推進</strong>——
+      兩個控制點各自跟著自己端點的 x,橫向永遠是同一條 smoothstep。它改的是垂直配速:
+      係數大 = 先貼著自己的欄位再急轉;係數小 = 一離開節點就往外畫。上面用 <code>0.42</code>。
+    </p>
+    <p>
+      它跟欄寬收窄是同一個決定的兩半。欄寬 10px 表示一次換道的水平位移只有 10px;
+      如果在一列 36px 之內走完,斜率接近垂直,看起來就是一條直線——
+      <strong>只改欄寬不改彎折,換來的是一張分不出換道的圖。</strong>
+    </p>
+    <h3 style="margin-top:12px">空心環則不建議</h3>
+    <p>
+      下面第三欄是空心環的樣子,放在這裡是因為評估過、結論是<strong>不要</strong>。
+      理由不是不好看,是兩件具體的事。
+    </p>
+    <div class="strip">
+      <div class="strip-item">
+        <div class="strip-head">
+          <span class="name">10px · 現況畫法</span>
+          <span class="w" style="color:var(--bad)">尖角</span>
+          <span class="note bad">彎折擠在一列內,實心點</span>
+        </div>
+        <div class="gutter-box" id="draw-a"></div>
+      </div>
+      <div class="strip-item">
+        <div class="strip-head">
+          <span class="name">10px · 加大彎折</span>
+          <span class="w">兩列</span>
+          <span class="note">弧線放緩,節點不變</span>
+        </div>
+        <div class="gutter-box" id="draw-b"></div>
+      </div>
+      <div class="strip-item">
+        <div class="strip-head">
+          <span class="name">10px · 加大彎折 ＋ 空心環</span>
+          <span class="w" style="color:var(--bad)">不建議</span>
+          <span class="note bad">花掉一個已經有意義的區別</span>
+        </div>
+        <div class="gutter-box" id="draw-c"></div>
+      </div>
+    </div>
+    <p>
+      <strong>一、它要解決的碰撞不存在。</strong>一列只有一個 commit,所以節點跟節點永遠不會在
+      水平方向相撞。真正的鄰居是隔壁 lane 那條線:節點 <code>r=5.5</code> 加 2px 背景色描邊,
+      外緣到 10px 外的鄰線還有 3.5px,而那圈背景色描邊本來就是為了在線上挖出護城河。
+      實心節點在 10px 下沒有問題。
+    </p>
+    <p>
+      <strong>二、「空心」在這個 app 裡已經有意義了。</strong>#399 的工作區那一列用的就是空心虛線環,
+      commit message 寫得很明白:<em style="font-style:normal;color:var(--fg)">hollow with a dashed ring
+      so it reads as neither of the filled kinds</em>。每個 commit 都變空心之後,那個區別就塌了——
+      工作區節點只剩虛線這一個弱得多的訊號。填實與空心是這張圖上少數還沒被用掉的對比,
+      拿去換一個不存在的碰撞不划算。
+    </p>
+    <p>
+      至於 <code>edgePath</code>,它現在把彎折限制在 <code>Math.min(rowHeight, py - cy)</code>——
+      最多一列。改成兩列是一個常數的事,不影響任何寬度計算。
+    </p>
+  </section>
+
+  <!-- ============ 7. 各家做法 ============ -->
+  <section>
+    <h2><span class="num">06</span>各家怎麼處理</h2>
+    <p>
+      這是個公認的難題:分支共用同一個 parent 時會在圖上某處堆積,把圖橫向撐開。
+      實務上看得到三種策略,加上一種攻擊成因的做法。
+    </p>
+    <div class="art">
+      <div class="art-row">
+        <div class="art-name">VS Code Git Graph<span class="kind">mhutchie · 你 mockup 的方向參考</span></div>
+        <div class="art-body">
+          自動撐開,但<strong>限制到不會遮住其他欄</strong>。issue #197 的原話是「in large repositories
+          the graph can become too wide when the table is automatically laid out, such that it hides
+          some of the other columns」,結論是「it should automatically limit its width so that it
+          doesn't hide any other columns」。已實作,milestone v1.18.0。
+          <span class="src">= 方案 b。同一個問題、同一個答案,而且是你已經在參考的那個工具。</span>
+        </div>
+      </div>
+      <div class="art-row">
+        <div class="art-name">SourceGit<span class="kind">lane merging · 做了,然後拒絕</span></div>
+        <div class="art-body">
+          issue #740 提議把<strong>共用同一個 parent 的 lane 合併</strong>(GitExtensions 的做法),
+          讓分支只從真正分岔處才占欄位。維護者<strong>真的實作出來測了</strong>——用
+          AvaloniaUI/Avalonia,同一個 revision 上掛著 13 條分支——結論是
+          「I don't think it's any clearer with merge branch lines enabled」,
+          issue 關成 <code>not-planned</code>。兩個理由:
+          <br><br>
+          <strong>一、顏色變成歧義。</strong>每條分支線有自己的顏色,線被合併後,顏色變化必須先判斷
+          是真的 merge commit 還是只是兩條線被視覺上併起來——
+          「this is not to simplify the problem, but to complicate the problem」。
+          <br>
+          <strong>二、橫線干擾判讀。</strong>難以一眼看出某個 commit 在哪條分支上,同樣得先做那個消歧義。
+          <span class="src">= 方案 e。有人替我們做過實驗了,結果是負的。</span>
+        </div>
+      </div>
+      <div class="art-row">
+        <div class="art-name">SourceGit / Fork<span class="kind">short link curve · 實際採用的規則</span></div>
+        <div class="art-body">
+          同一串討論裡,維護者說明了他們<strong>現在</strong>的規則:merge commit 和它的
+          <strong>第 2/第 3 個 parent</strong> 之間如果<strong>沒有其他 commit</strong>,就用一條
+          短連接曲線帶過去,不給它獨立的 lane;有其他 commit 才給獨立 lane。只對 merge 節點、
+          只對非第一個 parent。他補了一句「this design is also used by Fork」。
+          <span class="src">比 lane merging 窄得多,但兩個工具都在用。省下的正是最常見的那種浪費:
+          剛開的分支只有一兩個 commit 就併回來,卻整條佔一欄。</span>
+        </div>
+      </div>
+      <div class="art-row">
+        <div class="art-name">gitk / Sourcetree / Fork<span class="kind">grow &amp; scroll</span></div>
+        <div class="art-body">
+          欄數決定寬度,寬到不行就給水平捲軸。最誠實,但在窄窗格裡會把訊息欄擠掉——
+          這正是 mhutchie #197 抱怨的情況。
+        </div>
+      </div>
+      <div class="art-row">
+        <div class="art-name">終端機系(tig / lazygit)<span class="kind">cell-based</span></div>
+        <div class="art-body">
+          受限於字元格,只能截斷。但終端機的截斷是<strong>看得見的</strong>——字元互相碰撞,
+          使用者知道有東西被壓掉了,不會誤以為那是一條真的直線。
+        </div>
+      </div>
+    </div>
+    <p class="footnote">
+      重點不是誰做得最好,而是:<strong>沒有一家會把不同的 lane 靜靜畫在同一個 x、又繼續假裝它們是分開的。</strong>
+      要嘛撐開,要嘛明示地折疊。目前 tempo-term 的截斷是第三種——無聲的重疊——這才是真正該修的部分。
+    </p>
+  </section>
+
+  <!-- ============ 7. 建議 ============ -->
+  <section>
+    <h2><span class="num">07</span>建議的順序</h2>
+    <div class="rec">
+      <ol>
+        <li>
+          <strong>先修 x 相等當 lane 相等。</strong>純函式、好測、跟視覺決策無關,而且它現在就在
+          弄壞 Shift 導覽。獨立成一支 bug fix PR,可以單獨驗證。
+        </li>
+        <li>
+          <strong>再把欄數改成自適應,欄寬收窄,同時把彎折放大到兩列。</strong>從已載入的整個
+          commit 集合算最大 lane(不是可視範圍,不然捲動時寬度會跳),一個 session 內只增不減。
+          彎折半徑要跟欄寬一起改——10px 配一列彎折會擠成尖角,兩者是同一個決定的兩半。
+          順手把 <code>GitGraph.tsx:369</code> 寫死的 <code>6 * laneWidth</code> 換掉——那個 6 是
+          <code>maxLane + 1</code> 的重複,不一起改寬度就會對不上內容。
+        </li>
+        <li>
+          <strong>lane 讓位不要做。</strong>它省不到欄寬——欄數由尖峰決定,而尖峰在圖的最上面,
+          那裡還沒有任何 lane 被釋放。第 04 節的讀數是「8 條(讓位前 8)」。
+          加上它需要一個前置掃描(現在的佈局是單趟、純局部的)、
+          以及三條全靠眼睛才發現的畫法規則,投報率是負的。
+        </li>
+        <li>
+          <strong>lane merging 也不要做。</strong>SourceGit 的維護者已經替我們做過實驗:實作出來、
+          在 13 條分支的 repo 上測、結論是更難讀,關成 not-planned。他的理由(顏色變歧義、
+          橫線干擾判讀)套在 tempo-term 上完全成立——我們的顏色配置甚至更講究,
+          <code>pickColor</code> 會主動避開仍然活躍的鄰居,這個投資會被合併線直接抵銷。
+        </li>
+        <li>
+          <strong>short link curve 值得單獨評估。</strong>merge commit 的第 2 個 parent 若緊鄰其下、
+          中間沒有其他 commit,就不給它獨立 lane,用一條短曲線帶過。SourceGit 和 Fork 都這樣做。
+          它省下的是最常見的浪費:開了分支、兩個 commit 就併回來,卻整條佔一欄。
+          範圍小、不改讀法,適合當獨立 issue。
+        </li>
+      </ol>
+      <p style="font-size:13px">
+        側邊欄的精簡圖用 <code>commitGraph.ts</code> 的 <code>maxLane: 2</code>,是窄窗格刻意的設定。
+        所以 geometry 必須繼續當參數傳、不能寫死成常數——目前的設計已經是這樣,保持住就好。
+      </p>
+    </div>
+  </section>
+
+</div>
+
+<script>
+"use strict";
+
+/* The app's real branch palette (src/modules/git-graph/lib/branchColors.ts):
+   mid-lightness on purpose, so every hue reads on both #222 and #fff. */
+const BASE_PALETTE = ["#e0555f", "#e3712f", "#e8c139", "#46a758", "#3b8ee0", "#6366d6", "#a857c4"];
+const PALETTE = BASE_PALETTE;
+const BASE_SURFACE = "#222222";
+const SURFACE = BASE_SURFACE;
+const ACCENT = "#5eaab5";
+
+/* 18 commits, 8 concurrent lanes: a trunk plus seven unmerged feature
+   branches, which is what this repository actually looks like right now. */
+const HEAD_HASH = "66dbaed";
+const COMMITS = [
+  { h: "66dbaed", p: ["e132c66"], head: true, ref: "master", m: "feat(explorer): 保留檔案總管的資料夾展開狀態" },
+  { h: "b28c74d", p: ["c9f1a02"], ref: "feat/ui-row-hover-token", m: "wip(ui): give row hover its own token" },
+  { h: "950f968", p: ["7a41e8c"], ref: "feat/all-changes-panel-link", m: "feat(source-control): mark the folder when the file is shut inside it" },
+  { h: "2c3b1d9", p: ["4d90b71"], ref: "feat/git-comparison-bases", m: "feat(git): list the refs worth comparing against" },
+  { h: "58e8bb1", p: ["4d90b71"], ref: "feat/git-file-at-any-rev", m: "fix(git): a path git refuses to resolve reads as empty too" },
+  { h: "11f5e56", p: ["6b2ff30"], ref: "feat/git-graph-copy-ref-name", m: "feat(git-graph): copy a ref name from every chip" },
+  { h: "f6f0754", p: ["3ac1d55", "a203eff"], ref: "feat/git-graph-ref-chip-order", m: "feat(git-graph): order a commit's ref chips by what the row is read for" },
+  { h: "a203eff", p: ["8e77c14"], ref: "fix/graph-toolbar-overflow", m: "fix(git-graph): stop the toolbar controls colliding" },
+  { h: "e132c66", p: ["149bfa2"], m: "fix(diff): line the gutter icons up with the line number" },
+  { h: "c9f1a02", p: ["149bfa2"], m: "fix(diff): let the bar's text follow the diff font setting" },
+  { h: "7a41e8c", p: ["1d93370"], m: "fix(source-control): order the flat list the way the tree does" },
+  { h: "4d90b71", p: ["1d93370"], m: "feat(git): read any rev, compare from the divergence" },
+  { h: "6b2ff30", p: ["1d93370"], m: "fix(diff): open a new comparison at the top of it" },
+  { h: "3ac1d55", p: ["d017cce"], m: "fix(diff): key the gutter on the stretch" },
+  { h: "8e77c14", p: ["d017cce"], m: "fix(diff): never leave a sliver hidden behind a bar" },
+  { h: "149bfa2", p: ["1d93370"], m: "fix(diff): stop giving up on the diff of a big file" },
+  { h: "1d93370", p: ["d017cce"], m: "fix(diff): take the gutter hint down when its icon is destroyed" },
+  { h: "d017cce", p: [], m: "fix(diff): size the diff type from the font setting" },
+];
+
+/* ---- a faithful port of computeGraphLayout ---- */
+
+function laneX(lane, geo) {
+  return geo.padLeft + Math.min(lane, geo.maxLane) * geo.laneWidth + 12;
+}
+
+function gutterWidth(geo) {
+  return geo.padLeft + (geo.maxLane + 1) * geo.laneWidth + 24;
+}
+
+function computeLayout(commits, geo, headHash) {
+  const layouts = {};
+  const activeLanes = [];
+  const laneColors = [];
+  let nextColor = 0;
+  let widest = 0;
+
+  const pickColor = () => {
+    const used = new Set();
+    for (let i = 0; i < activeLanes.length; i++) {
+      if (activeLanes[i] !== "") used.add(laneColors[i]);
+    }
+    for (let off = 0; off < PALETTE.length; off++) {
+      const cand = (nextColor + off) % PALETTE.length;
+      if (!used.has(cand)) { nextColor = cand + 1; return cand; }
+    }
+    return nextColor++ % PALETTE.length;
+  };
+
+  const claimLane = () => {
+    const free = activeLanes.indexOf("");
+    if (free !== -1) { laneColors[free] = pickColor(); return free; }
+    activeLanes.push("");
+    laneColors.push(pickColor());
+    return activeLanes.length - 1;
+  };
+
+  /* HEAD holds the leftmost lane (the change in PR #415). */
+  if (headHash && commits.some((c) => c.h === headHash)) {
+    activeLanes.push(headHash);
+    laneColors.push(pickColor());
+  }
+
+  commits.forEach((commit, index) => {
+    const y = geo.padTop + index * geo.rowHeight;
+    const existing = activeLanes.indexOf(commit.h);
+    const lane = existing !== -1 ? existing : claimLane();
+    if (lane > widest) widest = lane;
+
+    for (let i = 0; i < activeLanes.length; i++) {
+      if (i !== lane && activeLanes[i] === commit.h) activeLanes[i] = "";
+    }
+
+    if (commit.p.length > 0) {
+      activeLanes[lane] = commit.p[0];
+      for (let i = 1; i < commit.p.length; i++) activeLanes[claimLane()] = commit.p[i];
+    } else {
+      activeLanes[lane] = "";
+    }
+
+    layouts[commit.h] = {
+      x: laneX(lane, geo), y, lane, index,
+      colorIndex: laneColors[lane] ?? 0,
+    };
+  });
+
+  const edges = [];
+  commits.forEach((commit, index) => {
+    const child = layouts[commit.h];
+    if (!child) return;
+    commit.p.forEach((ph) => {
+      const parent = layouts[ph];
+      if (!parent) return;
+      const colorIndex = child.lane >= parent.lane ? child.colorIndex : parent.colorIndex;
+      edges.push({
+        cx: child.x, cy: child.y, px: parent.x, py: parent.y,
+        lane: child.lane, parentLane: parent.lane,
+        childIndex: index, parentIndex: parent.index, colorIndex,
+      });
+    });
+  });
+
+  return { layouts, edges, widest };
+}
+
+/**
+ * For every hash a lane waits on, the row where that lane's run actually ends.
+ *
+ * Asking "how far to the next commit on this lane" is the wrong question and
+ * always answers one or two rows on a busy branch — the lane carries on past
+ * it. What decides whether a lane is worth moving is how much run it has left
+ * before it is absorbed, and that is only knowable by walking the whole thing
+ * first, so this is a separate pass.
+ */
+function laneRunEnds(commits) {
+  const active = [];
+  const awaitedBy = [];
+  const endOf = {};
+
+  const close = (i, row) => {
+    for (const h of awaitedBy[i]) {
+      if (endOf[h] === undefined) endOf[h] = row;
+    }
+    active[i] = "";
+    awaitedBy[i] = [];
+  };
+  const claim = () => {
+    let i = active.indexOf("");
+    if (i === -1) {
+      active.push("");
+      awaitedBy.push([]);
+      i = active.length - 1;
+    }
+    awaitedBy[i] = [];
+    return i;
+  };
+
+  commits.forEach((commit, index) => {
+    let lane = active.indexOf(commit.h);
+    if (lane === -1) lane = claim();
+    for (let i = 0; i < active.length; i++) {
+      if (i !== lane && active[i] === commit.h) close(i, index);
+    }
+    if (commit.p.length > 0) {
+      active[lane] = commit.p[0];
+      awaitedBy[lane].push(commit.p[0]);
+      for (let k = 1; k < commit.p.length; k++) {
+        const l = claim();
+        active[l] = commit.p[k];
+        awaitedBy[l].push(commit.p[k]);
+      }
+    } else {
+      close(lane, index);
+    }
+  });
+  const last = commits.length - 1;
+  for (let i = 0; i < active.length; i++) {
+    if (active[i] !== "") close(i, last);
+  }
+  return endOf;
+}
+
+/**
+ * Lane compaction: when a slot frees, the rightmost still-active lane slides
+ * into it, so the graph keeps closing up instead of leaving a hole. A lane can
+ * therefore change column part way down, which the layout above never does.
+ */
+function computeLayoutCompact(commits, geo, headHash) {
+  const layouts = {};
+  const activeLanes = [];
+  const laneColors = [];
+  const shifts = {};          // awaited hash -> [{ row, from, to }]
+  let nextColor = 0;
+  let widest = 0;
+
+  /* A lane about to finish is not worth moving: shifting it sideways one row
+     before it merges back is noise, and at a convergence — where a dozen lanes
+     end within a few rows of each other — every one of them doing it at once
+     is what turns the foot of the graph into a braid. Compaction pays off on
+     the lanes with a long run ahead, which is exactly where the columns are
+     being wasted. */
+  const runEnd = laneRunEnds(commits);
+  const MIN_RUN = 4;
+  const worthMoving = (hash, row) => {
+    const end = runEnd[hash];
+    return end === undefined || end - row >= MIN_RUN;
+  };
+
+  const pickColor = () => {
+    const used = new Set();
+    for (let i = 0; i < activeLanes.length; i++) {
+      if (activeLanes[i] !== "") used.add(laneColors[i]);
+    }
+    for (let off = 0; off < BASE_PALETTE.length; off++) {
+      const cand = (nextColor + off) % BASE_PALETTE.length;
+      if (!used.has(cand)) { nextColor = cand + 1; return cand; }
+    }
+    return nextColor++ % BASE_PALETTE.length;
+  };
+
+  const claimLane = () => {
+    const free = activeLanes.indexOf("");
+    if (free !== -1) { laneColors[free] = pickColor(); return free; }
+    activeLanes.push("");
+    laneColors.push(pickColor());
+    return activeLanes.length - 1;
+  };
+
+  /**
+   * Close every hole by sliding lanes left, each into the nearest one it can
+   * reach. Pulling the *rightmost* lane into a hole instead would move it
+   * across every column in between — a lane sitting at 7 leaping to 3 in one
+   * row, which reads as a line flung sideways rather than as closing up.
+   *
+   * `protect` is the lane of the commit just placed: its node is already drawn
+   * at that column, so it stays put and a hole beside it waits for a later row.
+   */
+  const compactLanes = (row, protect) => {
+    for (let idx = 0; idx < activeLanes.length; idx++) {
+      if (activeLanes[idx] !== "" || idx === protect) continue;
+      /* The first occupied slot to the right, and only that one: skipping over
+         a lane that is staying put would cross it, and lanes crossing is worse
+         than a column left open. */
+      let j = idx + 1;
+      while (j < activeLanes.length && activeLanes[j] === "") j++;
+      if (j >= activeLanes.length) break;
+      if (j === protect || !worthMoving(activeLanes[j], row)) continue;
+      const moved = activeLanes[j];
+      activeLanes[idx] = moved;
+      laneColors[idx] = laneColors[j];
+      activeLanes[j] = "";
+      (shifts[moved] = shifts[moved] || []).push({ row, from: j, to: idx });
+    }
+    while (activeLanes.length && activeLanes[activeLanes.length - 1] === "") {
+      activeLanes.pop();
+      laneColors.pop();
+    }
+  };
+
+  /* HEAD still takes the leftmost lane; compaction never moves it, because it
+     is only released once the walk reaches the end of its history. */
+  if (headHash && commits.some((c) => c.h === headHash)) {
+    activeLanes.push(headHash);
+    laneColors.push(pickColor());
+  }
+
+  commits.forEach((commit, index) => {
+    const y = geo.padTop + index * geo.rowHeight;
+    const existing = activeLanes.indexOf(commit.h);
+    const lane = existing !== -1 ? existing : claimLane();
+    if (lane > widest) widest = lane;
+
+    layouts[commit.h] = {
+      x: laneX(lane, geo), y, lane, index,
+      colorIndex: laneColors[lane] ?? 0,
+    };
+
+    if (commit.p.length > 0) {
+      activeLanes[lane] = commit.p[0];
+      for (let i = 1; i < commit.p.length; i++) activeLanes[claimLane()] = commit.p[i];
+    } else {
+      activeLanes[lane] = "";
+    }
+
+    /* Every other lane that was waiting for this same commit is done with.
+       Mark them all first, then close the holes in one pass — compacting after
+       each individual free would walk a lane left in several separate hops. */
+    for (let i = 0; i < activeLanes.length; i++) {
+      if (i !== lane && activeLanes[i] === commit.h) activeLanes[i] = "";
+    }
+    if (commit.p.length === 0) activeLanes[lane] = "";
+    compactLanes(index, commit.p.length === 0 ? -1 : lane);
+  });
+
+  const edges = [];
+  commits.forEach((commit, index) => {
+    const child = layouts[commit.h];
+    if (!child) return;
+    commit.p.forEach((ph, pi) => {
+      const parent = layouts[ph];
+      if (!parent) return;
+      const moves = pi === 0
+        ? (shifts[ph] || []).filter((s) => s.row > index && s.row <= parent.index)
+        : [];
+      edges.push({
+        cx: child.x, cy: child.y, px: parent.x, py: parent.y,
+        lane: child.lane, parentLane: parent.lane,
+        childIndex: index, parentIndex: parent.index,
+        colorIndex: child.lane >= parent.lane ? child.colorIndex : parent.colorIndex,
+        moves,
+      });
+    });
+  });
+
+  return { layouts, edges, widest };
+}
+
+/** An edge that changes column part way down, jogging at each hand-over. */
+function shiftedPath(e, geo) {
+  const moves = e.moves || [];
+  if (moves.length === 0) return edgePath(e, geo);
+  const k = geo.curve || 0.5;
+  let d = `M ${e.cx} ${e.cy}`;
+  let x = e.cx;
+  let yAt = e.cy;
+  for (const m of moves.slice().sort((a, b) => a.row - b.row)) {
+    const freed = geo.padTop + m.row * geo.rowHeight;
+    const nx = laneX(m.to, geo);
+    /* Several lanes can wait on one hash (that is what a merge is), so a move
+       recorded under it only belongs to the line actually sitting in the lane
+       it moved out of. */
+    if (nx === x || freed < yAt || laneX(m.from, geo) !== x) continue;
+    /* The slot opens at `freed`, so the move starts there and runs downward.
+       Reaching back up would carry the line across this branch's own nodes,
+       which sit in the lane it has not left yet. */
+    const r = Math.min(bendLength({ cx: x, px: nx }, geo), e.py - freed);
+    if (r <= 0) continue;
+    if (freed > yAt) d += ` L ${x} ${freed}`;
+    d += ` C ${x} ${freed + r * k}, ${nx} ${freed + r - r * k}, ${nx} ${freed + r}`;
+    x = nx;
+    yAt = freed + r;
+  }
+  const tail = { cx: x, cy: yAt, px: e.px, py: e.py };
+  const rest = edgePath(tail, geo);
+  return d + " " + rest.replace(/^M [^ ]+ [^ ]+/, "L " + x + " " + yAt);
+}
+
+/**
+ * `curve` places the two control points along the vertical run. It does not
+ * change the horizontal progression at all — both control points share their
+ * endpoint's x, so the sideways travel is a fixed smoothstep either way. What
+ * it changes is the vertical pacing, and therefore when the line looks like it
+ * starts leaving: a high value covers a lot of vertical ground before moving
+ * sideways, so the line hugs its own lane and then turns sharply; a low value
+ * starts drawing away immediately and arrives gently.
+ */
+/**
+ * How tall the bend is allowed to be.
+ *
+ * Tying it to the row height is what makes the current curve read as a
+ * straight line: one lane is 14px sideways, and a row is 36px, so the S is
+ * 36 tall and 14 wide — an aspect ratio of 0.4, and stretching it over more
+ * rows only flattens it further. Tying it to the horizontal distance instead
+ * keeps the shape of the curve fixed: the same arc whether the line steps one
+ * lane or crosses four, and unaffected by the row height.
+ */
+function bendLength(e, geo) {
+  if (geo.bendRows) return geo.rowHeight * geo.bendRows;
+  /* Capped at two rows. Scaling with the horizontal distance is right for a
+     hop of one or two lanes, but a merge coming back from lane 7 moves 70px
+     sideways, and 1.7× of that is a curve three and a half rows tall — seven
+     of those overlapping at a convergence is the knot at the foot of the
+     graph. Past the cap a long jump simply reads as the diagonal it is. */
+  const wanted = Math.abs(e.px - e.cx) * (geo.bendRatio || 2);
+  return Math.min(wanted, geo.rowHeight * 2);
+}
+
+function edgePath(e, geo, bend, curve) {
+  const { cx, cy, px, py } = e;
+  if (px === cx) return `M ${cx} ${cy} L ${px} ${py}`;
+  const raw = bend === undefined ? bendLength(e, geo) : bend;
+  const b = Math.min(raw, py - cy);
+  const k = curve === undefined ? (geo.curve || 0.5) : curve;
+  if (px < cx) {
+    const ty = py - b;
+    return `M ${cx} ${cy} L ${cx} ${ty} C ${cx} ${ty + b * k}, ${px} ${py - b * k}, ${px} ${py}`;
+  }
+  const by = cy + b;
+  return `M ${cx} ${cy} C ${cx} ${cy + b * k}, ${px} ${by - b * k}, ${px} ${by} L ${px} ${py}`;
+}
+
+/* ---- rendering ---- */
+
+const GEO_BASE = { laneWidth: 14, rowHeight: 36, padLeft: 16, padTop: 22, maxLane: 5 };
+
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function svgFor(commits, geo, layout, height, width) {
+  const hollow = !!geo.hollow;
+  const PALETTE = geo.palette || BASE_PALETTE;
+  const SURFACE = geo.surface || BASE_SURFACE;
+  const nodeR = geo.nodeR || 5.5;
+  const parts = [];
+  parts.push(`<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" aria-hidden="true" style="display:block">`);
+  layout.edges.forEach((e) => {
+    const d = e.moves && e.moves.length ? shiftedPath(e, geo) : edgePath(e, geo);
+    parts.push(
+      `<path d="${d}" fill="none" stroke="${PALETTE[e.colorIndex]}" stroke-width="2" opacity=".85"/>`
+    );
+  });
+  commits.forEach((c) => {
+    const l = layout.layouts[c.h];
+    if (!l) return;
+    if (c.head) {
+      parts.push(`<circle cx="${l.x}" cy="${l.y}" r="10" fill="none" stroke="${ACCENT}" stroke-width="3" opacity=".26"/>`);
+      parts.push(`<circle cx="${l.x}" cy="${l.y}" r="6" fill="${ACCENT}" stroke="${SURFACE}" stroke-width="2"/>`);
+    } else if (hollow) {
+      /* A ring keeps its own boundary when two lanes sit close together;
+         a filled dot at a 10px pitch starts to read as a dotted column. */
+      parts.push(`<circle cx="${l.x}" cy="${l.y}" r="4.6" fill="${SURFACE}" stroke="${PALETTE[l.colorIndex]}" stroke-width="2.4"/>`);
+    } else {
+      parts.push(`<circle cx="${l.x}" cy="${l.y}" r="${nodeR}" fill="${PALETTE[l.colorIndex]}" stroke="${SURFACE}" stroke-width="2"/>`);
+    }
+  });
+  parts.push(`</svg>`);
+  return parts.join("");
+}
+
+/** Full pane: lane gutter plus the commit rows beside it. */
+function renderPane(host, geo, opts) {
+  const options = opts || {};
+  const layout = options.compact
+    ? computeLayoutCompact(COMMITS, geo, HEAD_HASH)
+    : computeLayout(COMMITS, geo, HEAD_HASH);
+  const gw = gutterWidth(geo);
+  const height = geo.padTop + COMMITS.length * geo.rowHeight;
+  const rows = COMMITS.map((c) => {
+    const l = layout.layouts[c.h];
+    const chip = c.ref
+      ? `<span class="chip${c.head ? " head" : ""}">${esc(c.ref)}</span>`
+      : "";
+    return `<div class="grow" style="top:${l.y}px;padding-left:${gw}px">
+      <span class="hash">${c.h}</span>${chip}<span class="msg">${esc(c.m)}</span>
+    </div>`;
+  }).join("");
+
+  host.innerHTML =
+    `<div style="position:relative;min-width:640px;height:${height + 14}px">
+       <div style="position:absolute;left:0;top:0;width:${gw}px;height:${height}px">
+         ${svgFor(COMMITS, geo, layout, height, gw)}
+       </div>
+       <div class="rowlist">${rows}</div>
+       ${(options.pins || []).map((pin) => {
+          const l = layout.layouts[pin.hash];
+          return `<div class="pin${pin.good ? " good" : ""}" style="top:${l.y}px;left:${gw + 470}px">${esc(pin.text)}</div>`;
+       }).join("")}
+     </div>`;
+  return layout;
+}
+
+/** Gutter only, for the side-by-side width comparison. */
+function renderGutter(host, geo, list, head) {
+  const commits = list || COMMITS;
+  const layout = computeLayout(commits, geo, head === undefined ? HEAD_HASH : head);
+  const gw = gutterWidth(geo);
+  const height = geo.padTop + commits.length * geo.rowHeight;
+  host.style.width = gw + "px";
+  host.innerHTML = svgFor(commits, geo, layout, height, gw);
+  return layout;
+}
+
+/** Gutter plus messages, for the small three-branch comparison. */
+function renderMini(host, geo, list, compact) {
+  const layout = compact ? computeLayoutCompact(list, geo) : computeLayout(list, geo, null);
+  const gw = gutterWidth(geo);
+  const height = geo.padTop + list.length * geo.rowHeight;
+  const rows = list.map((c) => {
+    const l = layout.layouts[c.h];
+    const chip = c.ref ? `<span class="chip">${esc(c.ref)}</span>` : "";
+    return `<div class="grow" style="top:${l.y}px;padding-left:${gw}px">
+      <span class="hash">${c.h}</span>${chip}<span class="msg">${esc(c.m)}</span>
+    </div>`;
+  }).join("");
+  host.innerHTML =
+    `<div style="position:relative;min-width:400px;height:${height + 12}px">
+       <div style="position:absolute;left:0;top:0;width:${gw}px;height:${height}px">
+         ${svgFor(list, geo, layout, height, gw)}
+       </div>
+       <div class="rowlist">${rows}</div>
+     </div>`;
+}
+
+/* ---- 01 現況 ---- */
+const nowGeo = { ...GEO_BASE, maxLane: 5, laneWidth: 14 };
+const nowLayout = renderPane(document.getElementById("spec-now"), nowGeo, {
+  pins: [
+    { hash: "f6f0754", text: "← merge 被畫成直線" },
+    { hash: "11f5e56", text: "← lane 5·6·7 疊在這一欄" },
+  ],
+});
+document.getElementById("flag-now").textContent =
+  `${nowLayout.widest + 1} 條 lane,只有 ${nowGeo.maxLane + 1} 欄`;
+
+/* ---- 02 merge detail: four rows around the merge, clamped vs true ---- */
+function renderMergeDetail(host, maxLane) {
+  const geo = { laneWidth: 14, rowHeight: 40, padLeft: 10, padTop: 26, maxLane };
+  const sub = COMMITS.slice(5, 9);
+  const layout = computeLayoutSub(sub, geo);
+  const gw = geo.padLeft + (Math.min(layout.widest, maxLane) + 1) * geo.laneWidth + 26;
+  const height = geo.padTop + sub.length * geo.rowHeight - 6;
+  host.style.width = gw + "px";
+  host.innerHTML = svgFor(sub, geo, layout, height, gw);
+}
+
+/* The detail needs lanes seeded so the merge lands on lanes 6 and 7 exactly as
+   it does in the full graph; replay the full walk, then keep the four rows. */
+function computeLayoutSub(sub, geo) {
+  const full = computeLayout(COMMITS, geo, HEAD_HASH);
+  const layouts = {};
+  sub.forEach((c, i) => {
+    const l = full.layouts[c.h];
+    layouts[c.h] = { ...l, y: geo.padTop + i * geo.rowHeight, index: i };
+  });
+  const edges = [];
+  sub.forEach((c, i) => {
+    const child = layouts[c.h];
+    c.p.forEach((ph) => {
+      const parent = layouts[ph];
+      if (!parent) return;
+      edges.push({
+        cx: child.x, cy: child.y, px: parent.x, py: parent.y,
+        lane: child.lane, parentLane: parent.lane,
+        childIndex: i, parentIndex: parent.index,
+        colorIndex: child.lane >= parent.lane ? child.colorIndex : parent.colorIndex,
+      });
+    });
+  });
+  let widest = 0;
+  sub.forEach((c) => { if (layouts[c.h].lane > widest) widest = layouts[c.h].lane; });
+  return { layouts, edges, widest };
+}
+
+renderMergeDetail(document.getElementById("merge-clamped"), 5);
+renderMergeDetail(document.getElementById("merge-true"), 9);
+
+/* ---- 03 the four-option strip ---- */
+const OPTIONS = [
+  { name: "現況", maxLane: 5, laneWidth: 14, note: "3 條疊在最後一欄", bad: true },
+  { name: "方案 a", maxLane: 6, laneWidth: 14, note: "2 條疊在最後一欄", bad: true },
+  { name: "方案 b", maxLane: 7, laneWidth: 14, note: "全部分開" },
+  { name: "方案 b + d", maxLane: 7, laneWidth: 10, note: "全部分開,幾乎同寬" },
+];
+
+const strip = document.getElementById("strip");
+strip.innerHTML = OPTIONS.map((o, i) => {
+  const gw = gutterWidth({ ...GEO_BASE, maxLane: o.maxLane, laneWidth: o.laneWidth });
+  return `<div class="strip-item">
+    <div class="strip-head">
+      <span class="name">${o.name}</span>
+      <span class="w">${gw}px</span>
+      <span class="note${o.bad ? " bad" : ""}">${o.laneWidth}px × ${o.maxLane + 1} 欄 · ${o.note}</span>
+    </div>
+    <div class="gutter-box" id="gut-${i}"></div>
+    <div class="ruler" style="width:${gw}px"></div>
+  </div>`;
+}).join("");
+OPTIONS.forEach((o, i) => {
+  renderGutter(document.getElementById("gut-" + i), { ...GEO_BASE, maxLane: o.maxLane, laneWidth: o.laneWidth });
+});
+
+/* ---- 05a the three-branch case, which never trips the clamp at all ---- */
+/* The reference picture's own shape: a trunk, a branch with a single commit
+   that rejoins early, and a long branch carrying a dense run of commits. The
+   bend has somewhere to go in both cases, which is what makes it visible. */
+const DENSE = [
+  { h: "a91f3c2", p: ["4e77b10"], m: "feat(git-graph): reserve the leftmost lane for HEAD" },
+  { h: "c05e8b4", p: ["4e77b10"], ref: "fix/lane-clamp", m: "fix(git-graph): compare lanes, not x coordinates" },
+  { h: "7b2d941", p: ["e3a0c58"], ref: "feat/graph-geometry", m: "feat(git-graph): size the gutter from the lanes in use" },
+  { h: "e3a0c58", p: ["18f4d7a"], m: "feat(git-graph): let the bend take two rows when it has them" },
+  { h: "18f4d7a", p: ["6c9e230"], m: "test(git-graph): pin the gutter width to the widest lane" },
+  { h: "6c9e230", p: ["b5107ef"], m: "refactor(git-graph): geometry stays a parameter" },
+  { h: "4e77b10", p: ["2ad8f96"], m: "chore: bump the graph row budget" },
+  { h: "b5107ef", p: ["d41ca07"], m: "fix(git-graph): keep the trunk under the merge line" },
+  { h: "d41ca07", p: ["90b6e35"], m: "fix(git-graph): stop the edge overlaying the trunk" },
+  { h: "90b6e35", p: ["3f8a2d1"], m: "perf(git-graph): reuse a freed lane before growing" },
+  { h: "3f8a2d1", p: ["f7c4b88"], m: "feat(git-graph): colour a branch away from its neighbours" },
+  { h: "2ad8f96", p: ["f7c4b88"], m: "chore: silence the release notes noise" },
+  { h: "f7c4b88", p: ["55e1a30"], m: "chore: archive v0.3.5" },
+  { h: "55e1a30", p: [], m: "feat(setup): detect an existing node install" },
+];
+
+const SMALL = [
+  { h: "6e217fa", p: ["d24c57a"], m: "fix: always destroy the pty on close" },
+  { h: "812fe90", p: ["848af89"], ref: "origin/fix/graph-branch-colors", m: "fix(git-graph): keep two branches off one colour" },
+  { h: "848af89", p: ["798e2d4"], m: "fix(git-graph): keep the trunk under the merge line" },
+  { h: "798e2d4", p: ["d24c57a"], m: "fix(git-graph): stop the edge overlaying the trunk" },
+  { h: "d7440e3", p: ["17944b1"], ref: "origin/fix/fnm-windows-default-dir", m: "fix(setup): fnm's default install directory on Windows" },
+  { h: "17944b1", p: ["5338910"], m: "fix(setup): fnm's own default, not ours" },
+  { h: "d24c57a", p: ["5338910"], m: "chore: silence release notes noise" },
+  { h: "5338910", p: [], m: "chore: archive v0.1.1" },
+];
+
+/* Measured off the reference picture: lane pitch 27px, row height 40px, and
+   the bend spans about 55px vertically for one lane of horizontal move — so
+   roughly 1.4 rows, not the two this page first proposed. Its roundness comes
+   from the corner, not from the length: control points crossed well past 0.5. */
+const ROUND = { bendRatio: 1.6, curve: 0.42 };
+
+renderMini(document.getElementById("mini-now"), { ...GEO_BASE, maxLane: 5, laneWidth: 14, bendRows: 1 }, SMALL);
+renderMini(document.getElementById("mini-new"), { ...GEO_BASE, maxLane: 5, laneWidth: 14, ...ROUND }, SMALL);
+renderMini(document.getElementById("dense-now"), { ...GEO_BASE, maxLane: 5, laneWidth: 14, ...ROUND }, DENSE);
+renderMini(document.getElementById("dense-new"), { ...GEO_BASE, maxLane: 5, laneWidth: 14, ...ROUND }, DENSE, true);
+
+/* ---- 05b one bend, magnified, both curves over each other ---- */
+function renderBendDetail(host) {
+  const zoom = 3;
+  /* A uniform magnification of the real geometry, so the shape is the true
+     shape — only bigger. Nothing here is exaggerated to make a point. */
+  const rowHeight = GEO_BASE.rowHeight * zoom;   // 108
+  const laneWidth = GEO_BASE.laneWidth * zoom;   // 42
+  const x0 = 70;
+  const x1 = x0 + laneWidth;
+  const top = 44;
+  const rows = [0, 1, 2, 3].map((i) => top + i * rowHeight);
+  const edge = { cx: x1, cy: rows[0], px: x0, py: rows[3] };
+  const now = edgePath(edge, { rowHeight, bendRows: 1 }, undefined, 0.5);
+  const next = edgePath(edge, { rowHeight, ...ROUND });
+  const width = 560;
+  const height = rows[3] + 52;
+  const trunk = BASE_PALETTE[0];
+  const branch = BASE_PALETTE[3];
+
+  const label = (y, color, text, dash) =>
+    `<line x1="${x1 + 60}" y1="${y}" x2="${x1 + 84}" y2="${y}" stroke="${color}" stroke-width="2.5"${dash ? ` stroke-dasharray="${dash}"` : ""}/>` +
+    `<text x="${x1 + 92}" y="${y + 4}" fill="${color}" font-size="13" font-family="IBM Plex Mono, Consolas, monospace">${text}</text>`;
+
+  host.innerHTML = `
+    <svg width="100%" viewBox="0 0 ${width} ${height}" style="display:block;max-width:${width}px">
+      <!-- the trunk this branch comes back to -->
+      <path d="M ${x0} ${top - 30} L ${x0} ${height - 8}" stroke="${trunk}" stroke-width="2.5" fill="none" opacity=".55"/>
+      <!-- current: the bend is crammed into the last row -->
+      <path d="${now}" stroke="${branch}" stroke-width="2.5" fill="none" opacity=".45" stroke-dasharray="7 5"/>
+      <!-- proposed: the same endpoints, two rows to get there -->
+      <path d="${next}" stroke="${branch}" stroke-width="2.5" fill="none"/>
+      <!-- where each curve stops running straight -->
+      <line x1="${x1 - 9}" y1="${rows[2]}" x2="${x1 + 9}" y2="${rows[2]}" stroke="${branch}" stroke-width="1.5" opacity=".5"/>
+      <line x1="${x1 - 9}" y1="${rows[1]}" x2="${x1 + 9}" y2="${rows[1]}" stroke="${branch}" stroke-width="1.5"/>
+      <circle cx="${x1}" cy="${rows[0]}" r="7" fill="${branch}" stroke="${BASE_SURFACE}" stroke-width="2.5"/>
+      <circle cx="${x0}" cy="${rows[3]}" r="7" fill="${trunk}" stroke="${BASE_SURFACE}" stroke-width="2.5"/>
+      ${label(rows[1], branch, "2 列 — 改後", null)}
+      ${label(rows[2], branch, "1 列 — 現況", "7 5")}
+      <text x="${x1 + 60}" y="${rows[0] + 4}" fill="#85827b" font-size="12" font-family="IBM Plex Mono, Consolas, monospace">分支最後一個 commit</text>
+      <text x="${x0 - 4}" y="${rows[3] + 30}" fill="#85827b" font-size="12" font-family="IBM Plex Mono, Consolas, monospace">它的 parent(主幹上)</text>
+    </svg>`;
+}
+renderBendDetail(document.getElementById("bend-detail"));
+
+/* ---- 05 drawing style at a 10px pitch ---- */
+const DRAW = [
+  { id: "draw-a", geo: { bendRows: 1 }, hollow: false },
+  { id: "draw-b", geo: ROUND, hollow: false },
+  { id: "draw-c", geo: ROUND, hollow: true },
+];
+DRAW.forEach((d) => {
+  renderGutter(document.getElementById(d.id), {
+    ...GEO_BASE, maxLane: 7, laneWidth: 10, ...d.geo, hollow: d.hollow,
+  });
+});
+
+/* ---- 04 the live one ---- */
+const lw = document.getElementById("lw");
+const ml = document.getElementById("ml");
+const hollowBox = document.getElementById("style-hollow");
+const compactBox = document.getElementById("style-compact");
+const cv = document.getElementById("cv");
+const br = document.getElementById("br");
+const ROW_WIDTH = 900; /* GitGraph.tsx pins the row at min-w-[900px] */
+
+function updateLab() {
+  const laneWidth = Number(lw.value);
+  const maxLane = Number(ml.value);
+  const curve = Number(cv.value);
+  const bendRatio = Number(br.value);
+  const geo = {
+    ...GEO_BASE, laneWidth, maxLane, curve, bendRatio,
+    hollow: hollowBox.checked,
+  };
+  document.getElementById("cv-out").textContent = curve.toFixed(2);
+  document.getElementById("br-out").textContent = bendRatio.toFixed(1) + "×";
+  const compact = compactBox.checked;
+  const layout = renderPane(document.getElementById("spec-lab"), geo, { compact });
+  /* What the same history needs without compaction, so the saving is a number
+     rather than an impression. */
+  const plain = computeLayout(COMMITS, geo, HEAD_HASH);
+  const gw = gutterWidth(geo);
+  const hidden = Math.max(0, layout.widest - maxLane);
+
+  document.getElementById("lw-out").textContent = laneWidth + "px";
+  document.getElementById("ml-out").textContent = String(maxLane);
+  document.getElementById("r-gutter").textContent = gw + "px";
+  document.getElementById("r-used").textContent = compact
+    ? `${layout.widest + 1} 條(讓位前 ${plain.widest + 1})`
+    : `${layout.widest + 1} 條`;
+  document.getElementById("r-msg").textContent = (ROW_WIDTH - gw) + "px";
+  document.getElementById("lab-caption").textContent =
+    `maxLane ${maxLane} · laneWidth ${laneWidth}px · gutter ${gw}px` +
+    (compact ? " · lane 讓位" : "");
+
+  const verdict = document.getElementById("r-verdict");
+  if (hidden > 0) {
+    verdict.className = "verdict bad";
+    verdict.textContent = `${hidden} 條 lane 疊在最後一欄,merge 彎折與 Shift 導覽會出錯`;
+  } else {
+    verdict.className = "verdict ok";
+    verdict.textContent = "每條 lane 都有自己的欄位,彎折與導覽都正確";
+  }
+}
+
+lw.addEventListener("input", updateLab);
+ml.addEventListener("input", updateLab);
+hollowBox.addEventListener("change", updateLab);
+compactBox.addEventListener("change", updateLab);
+cv.addEventListener("input", updateLab);
+br.addEventListener("input", updateLab);
+updateLab();
+</script>
+
+</body>
+</html>
