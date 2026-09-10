@@ -180,8 +180,12 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   <div class="bar">
     <label class="toggle" for="compact">
-      <input type="checkbox" id="compact">
+      <input type="checkbox" id="compact" checked>
       <span>lane 讓位<span class="sub" style="display:block">欄位空出來就有人補上</span></span>
+    </label>
+    <label class="toggle" for="blind">
+      <input type="checkbox" id="blind" checked>
+      <span>無條件<span class="sub" style="display:block">不問這條 lane 還剩多長</span></span>
     </label>
     <label class="toggle" for="shape" style="font-weight:400">
       <span>歷史形狀
@@ -193,13 +197,15 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
       </select>
     </label>
     <label class="toggle" for="look" style="font-weight:400">
-      <span>預先多載入
-        <span class="sub" style="display:block">只拿來判斷,不畫出來</span>
+      <span>多抓幾列
+        <span class="sub" style="display:block">不畫成列,只用來接線／判斷</span>
       </span>
       <select id="look">
-        <option value="0">0 筆</option>
+        <option value="0">0 筆 — 最後一列下面沒有線</option>
+        <option value="1">1 筆</option>
         <option value="2">2 筆</option>
-        <option value="4" selected>4 筆</option>
+        <option value="3" selected>3 筆</option>
+        <option value="4">4 筆</option>
         <option value="8">8 筆</option>
       </select>
     </label>
@@ -330,7 +336,7 @@ const ROW_HEIGHT = 36;
 const PAD_LEFT = 16;
 const PAD_TOP = 22;
 const LANE_W = 14;
-const BEND = { ratio: 8, capRows: 1.5, curve: 0.72 };
+const BEND = { ratio: 1.6, capRows: 2, curve: 0.42 };
 const PAGE = 12;
 
 /**
@@ -453,12 +459,19 @@ function laneRunEnds(commits) {
  * below decide freshly. A lane that yielded on a guess that turned out wrong
  * simply yields again further down, in territory the reader has not seen yet.
  */
-function computeLayout(commits, compact, frozen) {
+function computeLayout(commits, compact, frozen, blind) {
   const layouts = {}, activeLanes = [], laneColors = [], shifts = {};
   let nextColor = 0, widest = 0;
   const runEnd = laneRunEnds(commits);
   const MIN_RUN = 4;
+  /* `blind`: never ask how long a lane still runs. That question is the only
+     one in here whose answer can change when more history arrives, so a lane
+     that yields on nothing but what is already on screen can never have that
+     decision taken back -- which is what freezing was for, without having to
+     remember anything. The price is a lane that yields and then ends a row
+     later; it simply yields again further down. */
   const worthMoving = (hash, row) => {
+    if (blind) return true;
     const end = runEnd[hash];
     return end === undefined || end - row >= MIN_RUN;
   };
@@ -602,20 +615,16 @@ function bendLength(e) {
 }
 
 /**
- * How hard the line holds its own lane before turning — eased as the crossing
- * widens (shape B).
+ * How hard the line holds its own lane before turning.
  *
- * The turn's height is fixed, so a three-lane crossing covers three times the
- * distance in the same vertical run. Keeping the one-lane setting there does
- * not read as the same curve made wider: the control points are crossed over,
- * and with that much further to travel the line swings into a wobble. Easing
- * toward 0.5 — plain symmetric control points — lets a wide crossing settle
- * into the clean diagonal it actually is, while a one-lane step keeps the
- * rounder corner it was tuned for.
+ * One constant, because `bendLength` ties the turn's height to how far it
+ * travels sideways: a three-lane crossing is the one-lane curve scaled up,
+ * same shape, so there is nothing left for a per-width adjustment to correct.
+ * An earlier version eased this toward 0.5 as the crossing widened -- that was
+ * compensating for a fixed height, which is gone.
  */
-function curveFor(dx) {
-  const lanes = Math.max(1, Math.abs(dx) / LANE_W);
-  return 0.5 + (BEND.curve - 0.5) / lanes;
+function curveFor() {
+  return BEND.curve;
 }
 
 function edgePath(e) {
@@ -623,7 +632,7 @@ function edgePath(e) {
   if (px === cx) return `M ${cx} ${cy} L ${px} ${py}`;
   /* `e.bend` is the height shared by everything meeting this commit. */
   const b = Math.min(e.bend === undefined ? bendLength(e) : e.bend, py - cy);
-  const k = curveFor(px - cx);
+  const k = curveFor();
   if (px < cx) {
     const ty = py - b;
     return `M ${cx} ${cy} L ${cx} ${ty} C ${cx} ${ty + b * k}, ${px} ${py - b * k}, ${px} ${py}`;
@@ -642,7 +651,7 @@ function shiftedPath(e) {
     /* The row's shared length, so lanes yielding together stay in step. */
     const room = m.len === undefined ? Math.min(bendLength({ cx: x, px: nx }), e.py - freed) : m.len;
     if (room <= 0) continue;
-    const k = curveFor(nx - x);
+    const k = curveFor();
     if (freed > yAt) d += ` L ${x} ${freed}`;
     d += ` C ${x} ${freed + room * k}, ${nx} ${freed + room - room * k}, ${nx} ${freed + room}`;
     x = nx; yAt = freed + room;
@@ -668,6 +677,7 @@ const compactBox = document.getElementById("compact");
 const lookSel = document.getElementById("look");
 const shapeSel = document.getElementById("shape");
 const freezeBox = document.getElementById("freeze");
+const blindBox = document.getElementById("blind");
 const moreBtn = document.getElementById("more");
 const resetBtn = document.getElementById("reset");
 const tally = document.getElementById("tally");
@@ -682,9 +692,10 @@ const tally = document.getElementById("tally");
  * they are not rendered.
  */
 function layoutFor(visible) {
+  const blind = blindBox.checked;
   const look = Number(lookSel.value);
   const all = HISTORY.slice(0, Math.min(HISTORY.length, visible + look));
-  return computeLayout(all, compactBox.checked, freezeBox.checked ? frozen : null);
+  return computeLayout(all, compactBox.checked, freezeBox.checked ? frozen : null, blind);
 }
 
 function draw() {
@@ -742,7 +753,11 @@ function draw() {
   const look = Number(lookSel.value);
   document.getElementById("cap").textContent =
     `畫出 ${loaded} / ${HISTORY.length} 列 · ${widest + 1} 條 lane · ` +
-    `lane 讓位 ${compactBox.checked ? "開" : "關"} · 預先多載入 ${look} 筆`;
+    `lane 讓位 ${compactBox.checked ? "開" : "關"} · ` +
+    `多抓 ${lookSel.value} 列 · ` +
+    (blindBox.checked
+      ? "無條件讓位（不問長度）"
+      : `讓位要看 ${lookSel.value >= 3 ? "夠" : "不夠"}(MIN_RUN − 1 = 3)`);
 
   return layout;
 }
@@ -813,11 +828,24 @@ moreBtn.addEventListener("click", () => {
   if (loaded >= HISTORY.length) moreBtn.disabled = true;
 });
 
+/* Freezing exists to stop a guess being taken back, and `blind` makes no
+   guesses -- so under it, replaying frozen moves and deciding fresh give the
+   same answer. The lookahead is never moot: whatever it is worth to the
+   decision, it is also what puts a line under the last few dots. */
+function syncControls() {
+  const moot = blindBox.checked || !compactBox.checked;
+  freezeBox.disabled = moot;
+  freezeBox.closest("label").style.opacity = moot ? ".4" : "";
+}
+syncControls();
+
 resetBtn.addEventListener("click", reset);
 compactBox.addEventListener("change", reset);
 lookSel.addEventListener("change", reset);
 shapeSel.addEventListener("change", reset);
 freezeBox.addEventListener("change", reset);
+blindBox.addEventListener("change", () => { syncControls(); reset(); });
+compactBox.addEventListener("change", syncControls);
 reset();
 </script>
 

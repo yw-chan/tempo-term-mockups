@@ -1307,7 +1307,12 @@ function renderMini(host, geo, list, compact) {
 }
 
 /* ---- 01 現況 ---- */
-const nowGeo = { ...GEO_BASE, maxLane: 5, laneWidth: 14 };
+/* `bendRows: 1` is what the app actually draws — edgePath() there is
+   `bend = Math.min(rowHeight, py - cy)` with a fixed 0.5 curve. Leaving it off
+   falls through to bendLength()'s proposed rule, which is the one section 05
+   argues *for*: a section showing today's graph must not already be drawn with
+   tomorrow's formula. */
+const nowGeo = { ...GEO_BASE, maxLane: 5, laneWidth: 14, bendRows: 1 };
 const nowLayout = renderPane(document.getElementById("spec-now"), nowGeo, {
   pins: [
     { hash: "f6f0754", text: "← merge 被畫成直線" },
@@ -1319,7 +1324,9 @@ document.getElementById("flag-now").textContent =
 
 /* ---- 02 merge detail: four rows around the merge, clamped vs true ---- */
 function renderMergeDetail(host, maxLane) {
-  const geo = { laneWidth: 14, rowHeight: 40, padLeft: 10, padTop: 26, maxLane };
+  // Both sides use the app's own bend: the only thing this pair varies is the
+  // clamp.
+  const geo = { laneWidth: 14, rowHeight: 40, padLeft: 10, padTop: 26, maxLane, bendRows: 1 };
   const sub = COMMITS.slice(5, 9);
   const layout = computeLayoutSub(sub, geo);
   const gw = geo.padLeft + (Math.min(layout.widest, maxLane) + 1) * geo.laneWidth + 26;
@@ -1381,7 +1388,9 @@ strip.innerHTML = OPTIONS.map((o, i) => {
   </div>`;
 }).join("");
 OPTIONS.forEach((o, i) => {
-  renderGutter(document.getElementById("gut-" + i), { ...GEO_BASE, maxLane: o.maxLane, laneWidth: o.laneWidth });
+  // All four on the app's own bend, so the only variable across them is the
+  // geometry each option proposes.
+  renderGutter(document.getElementById("gut-" + i), { ...GEO_BASE, maxLane: o.maxLane, laneWidth: o.laneWidth, bendRows: 1 });
 });
 
 /* ---- 05a the three-branch case, which never trips the clamp at all ---- */
@@ -1441,6 +1450,15 @@ function renderBendDetail(host) {
   const edge = { cx: x1, cy: rows[0], px: x0, py: rows[3] };
   const now = edgePath(edge, { rowHeight, bendRows: 1 }, undefined, 0.5);
   const next = edgePath(edge, { rowHeight, ...ROUND });
+  /* Where each curve leaves its own lane, taken from the same numbers the
+     paths were built from. Marking these by eye is how this diagram came to
+     claim the proposed bend was the taller of the two, which is backwards:
+     tying it to the 42px of horizontal travel makes it 67px, shorter than the
+     row it currently gets. */
+  const bendNow = rowHeight;
+  const bendNext = Math.abs(edge.px - edge.cx) * ROUND.bendRatio;
+  const tyNow = edge.py - bendNow;
+  const tyNext = edge.py - bendNext;
   const width = 560;
   const height = rows[3] + 52;
   const trunk = BASE_PALETTE[0];
@@ -1456,15 +1474,15 @@ function renderBendDetail(host) {
       <path d="M ${x0} ${top - 30} L ${x0} ${height - 8}" stroke="${trunk}" stroke-width="2.5" fill="none" opacity=".55"/>
       <!-- current: the bend is crammed into the last row -->
       <path d="${now}" stroke="${branch}" stroke-width="2.5" fill="none" opacity=".45" stroke-dasharray="7 5"/>
-      <!-- proposed: the same endpoints, two rows to get there -->
+      <!-- proposed: the same endpoints, a shorter run to get there -->
       <path d="${next}" stroke="${branch}" stroke-width="2.5" fill="none"/>
       <!-- where each curve stops running straight -->
-      <line x1="${x1 - 9}" y1="${rows[2]}" x2="${x1 + 9}" y2="${rows[2]}" stroke="${branch}" stroke-width="1.5" opacity=".5"/>
-      <line x1="${x1 - 9}" y1="${rows[1]}" x2="${x1 + 9}" y2="${rows[1]}" stroke="${branch}" stroke-width="1.5"/>
+      <line x1="${x1 - 9}" y1="${tyNow}" x2="${x1 + 9}" y2="${tyNow}" stroke="${branch}" stroke-width="1.5" opacity=".5"/>
+      <line x1="${x1 - 9}" y1="${tyNext}" x2="${x1 + 9}" y2="${tyNext}" stroke="${branch}" stroke-width="1.5"/>
       <circle cx="${x1}" cy="${rows[0]}" r="7" fill="${branch}" stroke="${BASE_SURFACE}" stroke-width="2.5"/>
       <circle cx="${x0}" cy="${rows[3]}" r="7" fill="${trunk}" stroke="${BASE_SURFACE}" stroke-width="2.5"/>
-      ${label(rows[1], branch, "2 列 — 改後", null)}
-      ${label(rows[2], branch, "1 列 — 現況", "7 5")}
+      ${label(tyNext, branch, `改後 — 彎折 ${(bendNext / zoom).toFixed(0)}px`, null)}
+      ${label(tyNow, branch, `現況 — 彎折 ${(bendNow / zoom).toFixed(0)}px`, "7 5")}
       <text x="${x1 + 60}" y="${rows[0] + 4}" fill="#85827b" font-size="12" font-family="IBM Plex Mono, Consolas, monospace">分支最後一個 commit</text>
       <text x="${x0 - 4}" y="${rows[3] + 30}" fill="#85827b" font-size="12" font-family="IBM Plex Mono, Consolas, monospace">它的 parent(主幹上)</text>
     </svg>`;

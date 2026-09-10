@@ -373,21 +373,21 @@ input[type="range"]:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var
             <label for="ratio">彎折高度<em class="hint">× 水平距離</em></label>
             <output id="ratio-out">8.0×</output>
           </div>
-          <input type="range" id="ratio" min="1" max="12" step="0.1" value="8">
+          <input type="range" id="ratio" min="0.8" max="4" step="0.1" value="1.6">
         </div>
         <div class="ctl">
           <div class="ctl-top">
             <label for="cap">彎折上限<em class="hint">列</em></label>
             <output id="cap-out">1.5</output>
           </div>
-          <input type="range" id="cap" min="0.6" max="5" step="0.1" value="1.5">
+          <input type="range" id="cap" min="0.6" max="5" step="0.1" value="2">
         </div>
         <div class="ctl">
           <div class="ctl-top">
             <label for="curve">起彎時機<em class="hint">小 = 馬上就彎</em></label>
             <output id="curve-out">0.72</output>
           </div>
-          <input type="range" id="curve" min="0.1" max="0.9" step="0.01" value="0.72">
+          <input type="range" id="curve" min="0.1" max="0.9" step="0.01" value="0.42">
         </div>
         <label class="toggle" for="compact">
           <input type="checkbox" id="compact" checked>
@@ -450,7 +450,7 @@ const SURFACE = "#222222";
 const ACCENT = "#5eaab5";
 
 /* The chosen drawing constants, live so the whole page can be tuned at once. */
-const DRAW = { bendRatio: 8.0, capRows: 1.5, curve: 0.72, compact: true };
+const DRAW = { bendRatio: 1.6, capRows: 2, curve: 0.42, compact: true };
 const ROW_HEIGHT = 36;
 const PAD_LEFT = 16;
 const PAD_TOP = 22;
@@ -730,27 +730,23 @@ function bendLength(e) {
 }
 
 /**
- * How hard the line holds its own lane before turning — eased as the crossing
- * widens.
+ * How hard the line holds its own lane before turning.
  *
- * The turn's height is capped, so a three-lane crossing covers three times the
- * distance in the same vertical run. Keeping the one-lane setting there does
- * not read as the same curve made wider: the control points are crossed over,
- * and with that much further to travel the line swings into a wobble. Easing
- * toward 0.5 — plain symmetric control points — lets a wide crossing settle
- * into the clean diagonal it actually is, while a one-lane step keeps the
- * rounder corner it was tuned for.
+ * One constant, because `bendLength` ties the turn's height to how far it
+ * travels sideways: a three-lane crossing is the one-lane curve scaled up,
+ * same shape, so there is nothing left for a per-width adjustment to correct.
+ * An earlier version eased this toward 0.5 as the crossing widened -- that was
+ * compensating for a fixed height, which is gone.
  */
-function curveFor(dx, geo) {
-  const lanes = Math.max(1, Math.abs(dx) / geo.laneWidth);
-  return 0.5 + ((DRAW.curve || 0.5) - 0.5) / lanes;
+function curveFor() {
+  return DRAW.curve || 0.5;
 }
 
 function edgePath(e, geo) {
   const { cx, cy, px, py } = e;
   if (px === cx) return `M ${cx} ${cy} L ${px} ${py}`;
   const b = Math.min(e.bend === undefined ? bendLength(e) : e.bend, py - cy);
-  const k = curveFor(px - cx, geo);
+  const k = curveFor();
   if (px < cx) {
     const ty = py - b;
     return `M ${cx} ${cy} L ${cx} ${ty} C ${cx} ${ty + b * k}, ${px} ${py - b * k}, ${px} ${py}`;
@@ -772,7 +768,7 @@ function shiftedPath(e, geo) {
     /* The row's shared length, so lanes yielding together stay in step. */
     const room = m.len === undefined ? Math.min(bendLength({ cx: x, px: nx }), e.py - freed) : m.len;
     if (room <= 0) continue;
-    const k = curveFor(nx - x, geo);
+    const k = curveFor();
     if (freed > yAt) d += ` L ${x} ${freed}`;
     d += ` C ${x} ${freed + room * k}, ${nx} ${freed + room - room * k}, ${nx} ${freed + room}`;
     x = nx;
